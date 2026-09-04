@@ -22,13 +22,11 @@ class PinValidator {
   }
 
   /// Checks whether the PIN has a valid 4-digit format.
-  ///
-  /// This intentionally does NOT check the secret PIN.
   bool isValid(String pin) {
     return validate(pin) == null;
   }
 
-  /// Checks whether the supplied PIN is the actual app PIN.
+  /// Checks whether the supplied PIN is the actual secret PIN.
   bool matchesSecret(String pin) {
     return pin == secretPin;
   }

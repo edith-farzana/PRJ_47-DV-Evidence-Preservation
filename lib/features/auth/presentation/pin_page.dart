@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
+
 import '../domain/pin_validator.dart';
 
 class PinPage extends StatefulWidget {
   final VoidCallback onSuccess;
 
-  const PinPage({
-    super.key,
-    required this.onSuccess,
-  });
+  const PinPage({super.key, required this.onSuccess});
 
   @override
   State<PinPage> createState() => _PinPageState();
@@ -28,12 +26,25 @@ class _PinPageState extends State<PinPage> {
   void _submitPin() {
     final pin = _controller.text.trim();
 
-    if (_validator.isValid(pin)) {
+    // First check whether the input is structurally valid.
+    if (!_validator.isValid(pin)) {
+      setState(() {
+        _error = _validator.validate(pin) ?? 'Invalid PIN.';
+      });
+
+      _controller.clear();
+      return;
+    }
+
+    // Then check whether it is the actual secret PIN.
+    if (_validator.matchesSecret(pin)) {
       FocusScope.of(context).unfocus();
+
       widget.onSuccess();
       return;
     }
 
+    // Four digits, but wrong PIN.
     setState(() {
       _error = 'Incorrect PIN';
     });
@@ -81,10 +92,7 @@ class _PinPageState extends State<PinPage> {
 
                 const Text(
                   'Enter PIN',
-                  style: TextStyle(
-                    color: Colors.white54,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(color: Colors.white54, fontSize: 15),
                 ),
 
                 const SizedBox(height: 30),
@@ -92,7 +100,7 @@ class _PinPageState extends State<PinPage> {
                 TextField(
                   controller: _controller,
                   keyboardType: TextInputType.number,
-                  obscureText: false,
+                  obscureText: true,
                   maxLength: 4,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -105,9 +113,7 @@ class _PinPageState extends State<PinPage> {
                     filled: true,
                     fillColor: const Color(0xFF171020),
                     hintText: 'PIN',
-                    hintStyle: const TextStyle(
-                      color: Colors.white24,
-                    ),
+                    hintStyle: const TextStyle(color: Colors.white24),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
@@ -120,11 +126,19 @@ class _PinPageState extends State<PinPage> {
                       ),
                     ),
                   ),
+                  onChanged: (_) {
+                    if (_error.isNotEmpty) {
+                      setState(() {
+                        _error = '';
+                      });
+                    }
+                  },
                   onSubmitted: (_) => _submitPin(),
                 ),
 
                 if (_error.isNotEmpty) ...[
                   const SizedBox(height: 10),
+
                   Text(
                     _error,
                     style: const TextStyle(

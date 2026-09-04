@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/auth/presentation/pin_page.dart';
+import '../features/calculator/presentation/calculator_page.dart';
 import '../features/home/home_page.dart';
 
 class SecureEvidenceApp extends StatefulWidget {
@@ -11,8 +12,17 @@ class SecureEvidenceApp extends StatefulWidget {
 }
 
 class _SecureEvidenceAppState extends State<SecureEvidenceApp> {
+  bool _showPin = false;
   bool _unlocked = false;
 
+  /// Called when the secret calculator sequence is entered.
+  void _openPin() {
+    setState(() {
+      _showPin = true;
+    });
+  }
+
+  /// Called when the correct PIN is entered.
   void _unlock() {
     setState(() {
       _unlocked = true;
@@ -35,7 +45,11 @@ class _SecureEvidenceAppState extends State<SecureEvidenceApp> {
         useMaterial3: true,
       ),
 
-      home: _unlocked ? const HomePage() : PinPage(onSuccess: _unlock),
+      home: _unlocked
+          ? const HomePage()
+          : _showPin
+          ? PinPage(onSuccess: _unlock)
+          : CalculatorPage(onPrivateAccess: _openPin),
     );
   }
 }
