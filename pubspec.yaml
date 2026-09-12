@@ -24,7 +24,14 @@ dependencies:
   cloud_firestore: ^6.0.0
   firebase_storage: ^13.0.0
 
+  # Cryptography.
+  # crypto     -> streaming SHA-256 (integrity hashing)
+  # cryptography -> AES-256-GCM, PBKDF2, secure random
+  # flutter_secure_storage -> Android Keystore-backed key storage (P2)
   crypto: ^3.0.6
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.2.2
+
   path: ^1.9.1
   uuid: ^4.6.0
 

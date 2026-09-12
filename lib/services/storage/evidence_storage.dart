@@ -65,7 +65,9 @@ class EvidenceStorage {
       originalFileName: originalFileName ?? _fileName(sourceFile.path),
       capturedAt: DateTime.now().toUtc(),
       fileSizeBytes: stat.size,
-      hash: null,
+      // Not yet encrypted or hashed -- addEvidence() routes through
+      // CryptoService in P3. Until then these records are unprotected
+      // and EvidenceItem.isEncrypted reports false for them.
     );
 
     await _appendToIndex(item);

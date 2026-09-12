@@ -94,37 +94,67 @@ No feature code in this phase. Deliberate: we agree the map before anyone drives
 
 The heart of the project. Everything after this depends on it, which is why it goes first and gets the most test coverage.
 
+> ⚠️ **P1 is written but UNVERIFIED.** No Flutter SDK is installed on the
+> development machine, so `flutter pub get`, `flutter analyze` and
+> `flutter test` have never been run against this code. It has not
+> compiled once. Treat the code below as a first draft until the gate
+> passes. Most likely places to need adjustment are flagged inline.
+
 ### Setup
-- [ ] `flutter pub add cryptography flutter_secure_storage` (resolve latest versions at install, do not hand-pin)
-- [ ] Keep the existing `crypto` package — it is used for streaming SHA-256
+- [x] Add `cryptography` and `flutter_secure_storage` to `pubspec.yaml` — **hand-written constraints (`^2.7.0`, `^9.2.2`), not resolved by pub. Verify with `flutter pub get`**
+- [x] Keep the existing `crypto` package — it is used for streaming SHA-256
+- [ ] Run `flutter pub get` and confirm the constraints resolve
 
 ### Implementation — `lib/services/crypto/crypto_service.dart` (new)
-- [ ] Generate a random 256-bit **DEK** (data encryption key) per file
-- [ ] Stream **SHA-256 of the plaintext** via `Sha256().bind(file.openRead())` — never load a 30-minute video into memory. This is the evidentiary hash
-- [ ] Encrypt with **AES-256-GCM** (`AesGcm.with256bits()`), fresh random 96-bit nonce per file
-- [ ] Bind the plaintext SHA-256 in as **AAD**, so ciphertext and hash cannot be mismatched
-- [ ] Wrap the DEK with the master KEK (arrives in P2 — stub the KEK for now and wire it in P2)
-- [ ] Compute SHA-256 of the ciphertext for transport integrity
-- [ ] Write the blob as `<uuid>.enc`; nonce, tag, wrapped DEK and both hashes go in metadata, never in the blob
-- [ ] Public API: `encryptFile()`, `decryptToTemp()`, `verifyIntegrity()`, `hashFile()`
-- [ ] `decryptToTemp()` targets a temp file deleted on screen dispose — plaintext never re-enters the evidence directory
+- [x] Generate a random 256-bit **DEK** (data encryption key) per file
+- [x] Stream **SHA-256 of the plaintext** via `sha256.bind(file.openRead())` — never load a 30-minute video into memory. This is the evidentiary hash
+- [x] Encrypt with **AES-256-GCM** (`AesGcm.with256bits()`), fresh random 96-bit nonce per file
+- [x] Bind the plaintext SHA-256 in as **AAD**, so ciphertext and hash cannot be mismatched
+- [x] Wrap the DEK with the master KEK — `encryptFile()` takes the KEK as a parameter, so P2 wires `KeyManager` in without touching this file
+- [x] Compute SHA-256 of the ciphertext for transport integrity
+- [x] Blob written to the caller's destination; nonce, tag, wrapped DEK and both hashes returned in `EncryptionResult`, never in the blob
+- [x] Public API: `encryptFile()`, `decryptToFile()`, `decryptToTemp()`, `verifyIntegrity()`, `verifyCiphertext()`, `hashFile()`, `hashBytes()`
+- [x] `decryptToTemp()` targets a temp file the caller must delete on dispose — plaintext never re-enters the evidence directory
+- [x] Failed decryption deletes the partial output rather than leaving half a file that looks like evidence
+- [ ] **Verify `encryptStream` / `decryptStream` signatures against the resolved `cryptography` version.** These are the least certain part of the file — written without a compiler. If they differ, this is where it breaks
 
 ### Implementation — `lib/models/evidence/evidence_item.dart` (modify)
-- [ ] Add `plaintextSha256`, `ciphertextSha256`, `wrappedDek`, `nonce`, `gcmTag`, `encryptionAlgorithm`, `keyVersion`
-- [ ] Replace the always-null `hash` field with `plaintextSha256`
-- [ ] Keep `toMap` / `fromMap` / `toJson` / `fromJson` round-tripping with the new fields
+- [x] Add `plaintextSha256`, `ciphertextSha256`, `wrappedDek`, `nonce`, `gcmTag`, `encryptionAlgorithm`, `keyVersion`
+- [x] Replace the always-null `hash` field with `plaintextSha256`
+- [x] Keep `toMap` / `fromMap` / `toJson` / `fromJson` round-tripping with the new fields
+- [x] Add `EvidenceItem.encrypted()` factory and an `isEncrypted` flag — crypto fields stay nullable until storage routes through `CryptoService` in P3
+- [x] Update the one caller in `evidence_storage.dart` that set `hash: null`
 
-### Tests — `test/services/crypto_service_test.dart` (new)
-- [ ] Round-trip: encrypt → decrypt → bytes byte-identical
-- [ ] SHA-256 is stable across runs for the same input
-- [ ] SHA-256 differs for a one-byte change
-- [ ] **Tamper detection:** flip one ciphertext byte → GCM authentication **throws** (must not silently return garbage)
-- [ ] **AAD tamper detection:** swap in a different plaintext hash → decryption fails
-- [ ] Wrong DEK fails cleanly with a clear error
-- [ ] Large-file streaming: a synthetic ~50MB file hashes without exhausting heap
-- [ ] `EvidenceItem` `toMap`/`fromMap` round-trips with every new field populated
+### Tests — `test/services/crypto_service_test.dart` (new, 23 cases)
+- [x] Round-trip: encrypt → decrypt → bytes byte-identical
+- [x] Empty file round-trips
+- [x] Encrypted blob does not contain the plaintext
+- [x] Two encryptions of the same file produce different ciphertext (proves no nonce reuse)
+- [x] SHA-256 is stable across runs for the same input
+- [x] SHA-256 differs for a one-byte change
+- [x] SHA-256 matches the NIST `"abc"` test vector
+- [x] Large-file streaming: a synthetic 50MB file hashes without exhausting heap
+- [x] **Tamper detection:** flipped ciphertext byte → authentication throws
+- [x] **Tamper detection:** truncated blob → authentication throws
+- [x] **AAD tamper detection:** substituted plaintext hash → decryption fails
+- [x] Modified GCM tag → authentication throws
+- [x] Wrong master key → `EvidenceIntegrityException`
+- [x] Truncated wrapped key → `EvidenceIntegrityException`
+- [x] No partial plaintext left behind after a failed decryption
+- [x] `verifyIntegrity` passes for untouched evidence, returns false (not throws) for tampered
+- [x] `verifyCiphertext` detects storage corruption
+- [x] Metadata: algorithm, key version, sizes, hash lengths
+- [x] Nonce is 96 bits, tag is 128 bits, wrapped DEK is 60 bytes
+- [x] `EvidenceItem` round-trips every crypto field through JSON
+- [x] `isEncrypted` false for a pre-encryption record, true once metadata is present
 
-**Gate:** `flutter test` green · `flutter analyze` clean · commit `P1: crypto core`
+**Gate — ⛔ BLOCKED, not passed:**
+- [ ] `flutter pub get` resolves
+- [ ] `flutter analyze` clean
+- [ ] `flutter test` green — **none of the 23 tests above has ever been executed**
+- [x] Committed as a draft so the work is not lost
+
+> **Do not count P1 toward the completion percentage until the gate passes.** Code that has never compiled is not 14%.
 
 ---
 
@@ -320,7 +350,7 @@ Update this after every gate.
 | Phase | Weight | Status | Done |
 |---|---|---|---|
 | P0 Planning & docs | 4% | In progress | 4/6 tasks |
-| P1 Crypto core | 14% | Not started | — |
+| P1 Crypto core | 14% | ⛔ Written, gate blocked | Code + 23 tests written, **never compiled or run** |
 | P2 Key & PIN management | 11% | Not started | — |
 | P3 Storage hardening | 9% | Not started | — |
 | P4 Safety fixes | 9% | Not started | — |
@@ -331,8 +361,14 @@ Update this after every gate.
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~28%**
+**Current: ~28%** — P1 code exists but does not count until it compiles and its tests pass
 **Review target: 65%**
+
+> 🚨 **Blocking the whole schedule: no Flutter SDK on the development
+> machine.** Every phase gate from P1 onward depends on `flutter test`.
+> Install the SDK before continuing, or move development to the
+> teammate's machine. Writing more unverified phases on top of an
+> unverified P1 is how a crypto bug reaches the demo.
 
 ---
 
