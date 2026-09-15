@@ -268,28 +268,63 @@ Where "secure read-only database" stops being a claim and becomes something we c
 
 > **Why anonymous:** an email or SMS confirmation lands in an inbox the abuser may have access to. Anonymous auth leaves no trace tying the account to the survivor. This is a deliberate threat-model decision, not laziness — say so in the review.
 
-### Data model
-- [ ] Firestore `/users/{uid}/evidence/{evidenceId}` — metadata only (hashes, nonce, wrapped DEK, timestamps, size, type)
-- [ ] Storage `/users/{uid}/evidence/{evidenceId}.enc` — encrypted blob only
-- [ ] `lib/services/sync/firebase_evidence_repository.dart` (new) — **upload blob first, then write metadata**, so a metadata record never points at a missing file
+### Data model — hybrid, media stays local by default
+
+> **Decision (2026-09-16):** media is **not** uploaded by default. Only the
+> metadata and the wrapped key go to the cloud. Uploading the encrypted
+> blob is a **per-item opt-in** the survivor controls.
+>
+> The stated reason was privacy — not wanting to hold survivor media.
+> Note for the record that client-side encryption already solved that:
+> Firebase only ever receives ciphertext we cannot decrypt (adversary
+> A6 in `docs/SECURITY.md`). The real justification for opt-in is
+> **survivor control over what leaves their device**, which is worth
+> having in a DV app regardless of what the crypto guarantees.
+
+**Always uploaded — Firestore `/users/{uid}/evidence/{evidenceId}`**
+- [ ] Metadata only: `plaintextSha256`, `ciphertextSha256`, `wrappedDek`, `nonce`, `gcmTag`, `capturedAt`, `fileSizeBytes`, `type`, `encryptionAlgorithm`, `keyVersion`
+- [ ] No filename, no location, no free text — nothing that identifies a person
+
+**Opt-in only — Storage `/users/{uid}/evidence/{evidenceId}.enc`**
+- [ ] Uploaded **only** when the user explicitly enables backup for that item
+- [ ] Per-item "Back up this evidence" toggle in the vault (`lib/features/vault/evidence_vault_page.dart`)
+- [ ] Clear copy explaining the trade-off: backed up survives losing the phone; local-only never leaves the device
+
+**Backup receipts — Firestore `/users/{uid}/backups/{evidenceId}`**
+- [ ] A create-only receipt written when a blob upload completes
+
+> **Why a separate collection instead of a flag on the evidence doc:**
+> flipping a `hasBackup` field would be an **update**, and the whole
+> point of this phase is that `allow update: if false`. A create-only
+> receipt in its own collection keeps the evidence record genuinely
+> immutable while still recording that a backup exists — and it is what
+> lets a reinstalled app discover which items have cloud copies.
+
+**Local sync state**
+- [ ] Add `backupState` (`localOnly` / `uploading` / `backedUp` / `failed`) to the **local encrypted index only**, never to Firestore
+- [ ] `lib/services/sync/firebase_evidence_repository.dart` (new) — metadata write first, then blob upload if opted in, then the receipt
 
 ### Security rules — `firestore.rules`, `storage.rules` (new)
-- [ ] Firestore: `allow create` and `allow read` for own uid only; **`allow update, delete: if false`**
+- [ ] Firestore evidence: `allow create` + `allow read` for own uid; **`allow update, delete: if false`**
+- [ ] Firestore backups: same create-only rule
 - [ ] Storage: `allow create: if resource == null` (no overwrite); **`allow delete: if false`**
 
 ### Tests
-- [ ] **Rules tests** (`test/rules/evidence_rules.test.js`, Firebase emulator + `@firebase/rules-unit-testing`) — this is the headline deliverable of the phase:
+- [ ] **Rules tests** (`test/rules/evidence_rules.test.js`, Firebase emulator + `@firebase/rules-unit-testing`) — the headline deliverable of the phase:
   - [ ] Create succeeds for own uid
   - [ ] Create denied for another user's uid
   - [ ] **Update denied**
   - [ ] **Delete denied**
   - [ ] Read denied when unauthenticated
+  - [ ] Backup receipt create succeeds, update and delete denied
   - [ ] Storage overwrite denied
-- [ ] Dart: repository uploads blob before metadata
-- [ ] Dart: a failed blob upload writes no metadata record
+- [ ] Dart: metadata uploads for **every** item, including local-only ones
+- [ ] Dart: **no blob is uploaded unless backup is explicitly enabled** — the load-bearing test for this decision
+- [ ] Dart: enabling backup uploads the blob and writes a receipt
+- [ ] Dart: a failed blob upload writes no receipt, and `backupState` becomes `failed`
 - [ ] Dart: the uploaded payload contains no plaintext (assert on bytes handed to the mock)
 
-**Gate:** rules tests green against the emulator · `flutter test` green · one real capture visible in the Firebase console · **delete attempt denied in the rules playground** · commit `P5: firebase backend and immutable rules`
+**Gate:** rules tests green against the emulator · `flutter test` green · one capture visible in Firestore with **no blob in Storage** · then enable backup on it and see the blob and receipt appear · **delete attempt denied in the rules playground** · commit `P5: firebase backend and immutable rules`
 
 ---
 
