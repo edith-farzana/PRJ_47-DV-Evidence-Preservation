@@ -8,6 +8,31 @@
 
 ---
 
+## 🚧 Current Status
+
+**This project is under active development — approximately 28% complete.**
+
+This README describes the **design goals** of Secure Evidence. Sections below marked 🔴 are specified and planned but **not yet implemented**. We are documenting the target architecture openly rather than describing unbuilt features as if they shipped.
+
+**Working today**
+- ✅ Functional decoy calculator front-end with hidden unlock sequence
+- ✅ PIN gate with format validation (unit tested)
+- ✅ Photo, video and audio capture
+- ✅ Local evidence store with append-only discipline
+- ✅ Evidence vault listing with timestamps and metadata
+- ✅ Emergency helpline directory
+
+**In progress**
+- 🔴 Client-side encryption (AES-256-GCM, envelope key hierarchy)
+- 🔴 SHA-256 integrity hashing
+- 🔴 Real key and PIN management (Android Keystore)
+- 🔴 Firebase backend with server-enforced immutability
+- 🔴 Tamper-evident audit log
+
+See **[`DEVELOPMENT_CHECKLIST.md`](DEVELOPMENT_CHECKLIST.md)** for the full build plan and **[`docs/SECURITY.md`](docs/SECURITY.md)** for the security design and threat model.
+
+---
+
 ## 🔐 Why Secure Evidence?
 
 In domestic violence situations, evidence can be lost, discovered, altered, or deleted long before it reaches a courtroom.
@@ -16,25 +41,25 @@ In domestic violence situations, evidence can be lost, discovered, altered, or d
 
 ### **Preserve the evidence. Protect its integrity. Protect the survivor.**
 
-🕵️ **Discreet by Design**  
+✅ 🕵️ **Discreet by Design**  
 A familiar interface helps keep the purpose of the application private.
 
-📸 **Evidence Preservation**  
+✅ 📸 **Evidence Preservation**  
 Sensitive evidence can be captured and preserved within a protected environment.
 
-🔒 **Layered Security**  
+🔴 🔒 **Layered Security**  
 Evidence is protected through a purpose-built encryption and integrity architecture.
 
-🧬 **Evidence Integrity**  
+🔴 🧬 **Evidence Integrity**  
 The system is designed to help establish that preserved evidence has not been silently altered.
 
-📋 **Traceability**  
+🔴 📋 **Traceability**  
 Evidence-related information and events are structured to support accountability and verification.
 
-☁️ **Long-Term Preservation**  
+🔴 ☁️ **Long-Term Preservation**  
 Designed for secure storage, synchronization and resilient evidence preservation.
 
-🚨 **Panic Protection**  
+🔴 🚨 **Panic Protection**  
 A rapid return to the discreet interface when immediate privacy is required.
 
 ---
@@ -45,22 +70,22 @@ Digital evidence is only useful when its **authenticity, integrity, provenance, 
 
 Secure Evidence is designed to support these principles through:
 
-**🔐 Protected Evidence**  
+🔴 **Protected Evidence**  
 Sensitive content is secured through a layered encryption architecture.
 
-**🕒 Time & Metadata**  
+✅ **Time & Metadata**  
 Relevant evidence information is preserved alongside the captured material.
 
-**🧬 Integrity Verification**  
+🔴 **Integrity Verification**  
 Cryptographic mechanisms are designed to detect unauthorized alteration.
 
-**📋 Auditability**  
+🔴 **Auditability**  
 Evidence-related actions can be recorded to provide a traceable history.
 
-**🔒 Controlled Access**  
+🟡 **Controlled Access**  
 Access to preserved evidence is restricted through authentication and authorization.
 
-**☁️ Preservation Controls**  
+🔴 **Preservation Controls**  
 The architecture is designed to reduce unauthorized modification or deletion at the storage and backend layers.
 
 > **The objective is not simply to store evidence — but to preserve its integrity and history.**
@@ -87,23 +112,34 @@ The underlying security architecture combines modern cryptographic protection, i
 
 The implementation is intentionally designed so that **the evidence itself remains protected throughout its lifecycle.**
 
-### The exact security mechanisms stay behind the interface.
+### The design is documented openly — the keys are not.
+
+Security through obscurity protects nobody. The full cryptographic design, key hierarchy and threat model are published in **[`docs/SECURITY.md`](docs/SECURITY.md)**, including an honest account of what this system does *not* defend against. What stays private is the user's keys, which never leave their device — not the design that protects them.
 
 ---
 
 ## ⚡ Technology
 
+### ✅ In use today
+
 **Mobile**  
 `Flutter` · `Dart` · `Android`
 
+**Capture & storage**  
+`camera` · `image_picker` · `record` · `path_provider`
+
+### 🔴 Planned
+
 **Security**  
-`AES-256-GCM` · `SHA-256` · `Secure Key Management` · `Envelope Encryption`
+`AES-256-GCM` · `SHA-256` · `PBKDF2-HMAC-SHA256` · `Envelope Encryption` · `Android Keystore`
 
 **Backend**  
-`REST API` · `JWT` · `PostgreSQL` · `Cloud Storage`
+`Firebase Anonymous Auth` · `Cloud Firestore` · `Firebase Storage` · `Firestore Security Rules`
 
-**Infrastructure**  
-`KMS` · `Audit Logging` · `Secure Synchronization`
+**Integrity**  
+`Hash-chained audit log` · `Server-enforced immutability` · `Client-side encryption`
+
+> **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them. Rationale is in [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ---
 
