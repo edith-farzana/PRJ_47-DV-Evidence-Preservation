@@ -33,16 +33,14 @@ class EvidenceIndexCorruptedException implements Exception {
 /// everything captured since. So a "seal" -- the item count and the
 /// SHA-256 of the current index.enc -- is kept in [SecureStore]
 /// (Keystore-backed), and every load checks the file against it.
+///
+/// The master key is passed per call rather than held, so a caller can
+/// hand in its own copy that a concurrent lock() cannot zero.
 class EvidenceIndex {
-  EvidenceIndex({
-    required this.directory,
-    required this._store,
-    required this._masterKey,
-  });
+  EvidenceIndex({required this.directory, required this._store});
 
   final Directory directory;
   final SecureStore _store;
-  final SecretKey Function() _masterKey;
 
   static const String _sealKey = 'idx.v1.seal';
   static const int _nonceLength = 12;
@@ -62,15 +60,17 @@ class EvidenceIndex {
 
   /// All records, in stored order. Returns `[]` only for a vault that
   /// has genuinely never had anything written to it.
-  Future<List<EvidenceItem>> load() => _serialized(_load);
+  Future<List<EvidenceItem>> load(SecretKey masterKey) =>
+      _serialized(() => _load(masterKey));
 
   /// Adds [item]. The file is replaced atomically (write temp, rename),
   /// so a crash leaves either the old index or the new one.
-  Future<void> append(EvidenceItem item) => _serialized(() async {
-    final current = await _load();
+  Future<void> append(EvidenceItem item, SecretKey masterKey) =>
+      _serialized(() async {
+        final current = await _load(masterKey);
 
-    await _write([...current, item]);
-  });
+        await _write([...current, item], masterKey);
+      });
 
   // ---------------------------------------------------------------
 
@@ -82,7 +82,7 @@ class EvidenceIndex {
     return result;
   }
 
-  Future<List<EvidenceItem>> _load() async {
+  Future<List<EvidenceItem>> _load(SecretKey masterKey) async {
     final seal = await _readSeal();
     final exists = await _file.exists();
 
@@ -131,7 +131,7 @@ class EvidenceIndex {
       );
     }
 
-    final items = await _decrypt(bytes);
+    final items = await _decrypt(bytes, masterKey);
 
     if (items.length != expectedCount) {
       throw EvidenceIndexCorruptedException(
@@ -142,8 +142,8 @@ class EvidenceIndex {
     return items;
   }
 
-  Future<void> _write(List<EvidenceItem> items) async {
-    final bytes = await _encrypt(items);
+  Future<void> _write(List<EvidenceItem> items, SecretKey masterKey) async {
+    final bytes = await _encrypt(items, masterKey);
     final hash = crypto.sha256.convert(bytes).toString();
 
     final previous = await _readSeal();
@@ -169,28 +169,34 @@ class EvidenceIndex {
     await _writeSeal(_Seal(count: items.length, hash: hash));
   }
 
-  Future<SecretKey> _indexKey() {
+  Future<SecretKey> _indexKey(SecretKey masterKey) {
     return Hkdf(
       hmac: Hmac.sha256(),
       outputLength: 32,
-    ).deriveKey(secretKey: _masterKey(), info: _hkdfInfo);
+    ).deriveKey(secretKey: masterKey, info: _hkdfInfo);
   }
 
-  Future<List<int>> _encrypt(List<EvidenceItem> items) async {
+  Future<List<int>> _encrypt(
+    List<EvidenceItem> items,
+    SecretKey masterKey,
+  ) async {
     final plaintext = utf8.encode(
       jsonEncode(items.map((item) => item.toMap()).toList()),
     );
 
     final box = await _cipher.encrypt(
       plaintext,
-      secretKey: await _indexKey(),
+      secretKey: await _indexKey(masterKey),
       aad: _aad,
     );
 
     return [...box.nonce, ...box.cipherText, ...box.mac.bytes];
   }
 
-  Future<List<EvidenceItem>> _decrypt(List<int> bytes) async {
+  Future<List<EvidenceItem>> _decrypt(
+    List<int> bytes,
+    SecretKey masterKey,
+  ) async {
     if (bytes.length < _nonceLength + _macLength) {
       throw const EvidenceIndexCorruptedException('index.enc is truncated.');
     }
@@ -206,7 +212,7 @@ class EvidenceIndex {
     try {
       plaintext = await _cipher.decrypt(
         box,
-        secretKey: await _indexKey(),
+        secretKey: await _indexKey(masterKey),
         aad: _aad,
       );
     } on SecretBoxAuthenticationError {

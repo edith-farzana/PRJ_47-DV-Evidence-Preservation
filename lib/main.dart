@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app/app.dart';
+import 'app/app_lock_controller.dart';
 import 'services/crypto/key_manager.dart';
 import 'services/crypto/secure_store.dart';
 import 'services/storage/evidence_storage.dart';
@@ -24,11 +25,14 @@ Future<void> main() async {
       ? await keyManager.unlockSequence()
       : null;
 
-  runApp(
-    SecureEvidenceApp(
-      keyManager: keyManager,
-      storage: storage,
-      unlockSequence: unlockSequence,
-    ),
+  final lock = AppLockController(
+    keyManager: keyManager,
+    storage: storage,
+    store: store,
+    unlockSequence: unlockSequence,
   );
+
+  await lock.attach();
+
+  runApp(SecureEvidenceApp(lock: lock));
 }

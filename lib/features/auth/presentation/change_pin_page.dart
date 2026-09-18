@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/panic_button.dart';
 import '../../../services/crypto/key_manager.dart';
 import '../domain/pin_validator.dart';
 import 'auth_widgets.dart';
@@ -96,6 +97,7 @@ class _ChangePinPageState extends State<ChangePinPage> {
         backgroundColor: AuthColors.background,
         foregroundColor: Colors.white,
         title: const Text('Change PIN'),
+        actions: const [PanicButton()],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

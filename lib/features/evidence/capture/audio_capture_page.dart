@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../app/app_lock_controller.dart';
 import '../../../app/app_scope.dart';
+import '../../../app/panic_button.dart';
 import '../../../models/evidence/evidence_item.dart';
 
 class AudioCapturePage extends StatefulWidget {
@@ -15,11 +16,18 @@ class AudioCapturePage extends StatefulWidget {
   State<AudioCapturePage> createState() => _AudioCapturePageState();
 }
 
-class _AudioCapturePageState extends State<AudioCapturePage> {
+class _AudioCapturePageState extends State<AudioCapturePage>
+    implements CaptureSession {
   final AudioRecorder _recorder = AudioRecorder();
+
+  late AppLockController _lock;
 
   bool _recording = false;
   bool _saving = false;
+
+  /// Set when a lock has taken the recording. From then on this screen
+  /// must not stop or save it itself.
+  bool _handedOver = false;
 
   DateTime? _startedAt;
 
@@ -28,14 +36,44 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
   Duration _duration = Duration.zero;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _lock = AppScope.of(context).lock;
+  }
+
+  @override
   void dispose() {
+    _lock.unregisterCapture(this);
     _timer?.cancel();
     _recorder.dispose();
     super.dispose();
   }
 
+  /// Called by a lock or panic while recording: stop, and give the file
+  /// to the lock to save. The file is already in the pending folder, so
+  /// even if that save is interrupted it is stored on the next unlock.
+  @override
+  Future<(File, EvidenceType)?> stopAndHandOver() async {
+    if (!_recording || _saving || _handedOver) {
+      return null;
+    }
+
+    _handedOver = true;
+    _timer?.cancel();
+
+    final path = await _recorder.stop();
+
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+
+    return (File(path), EvidenceType.audio);
+  }
+
   Future<void> _startRecording() async {
     if (_recording || _saving) return;
+
+    final storage = AppScope.of(context).storage;
 
     final permission = await _recorder.hasPermission();
 
@@ -49,11 +87,9 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
       return;
     }
 
-    final directory = await getTemporaryDirectory();
-
-    final fileName = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-    final path = '${directory.path}/$fileName';
+    // Straight into the pending folder: if the app dies mid-recording,
+    // whatever was captured is still stored on the next unlock.
+    final file = await storage.newPendingFile(EvidenceType.audio, '.m4a');
 
     await _recorder.start(
       const RecordConfig(
@@ -61,8 +97,10 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         bitRate: 128000,
         sampleRate: 44100,
       ),
-      path: path,
+      path: file.path,
     );
+
+    _lock.registerCapture(this);
 
     _startedAt = DateTime.now();
 
@@ -87,9 +125,13 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
   }
 
   Future<void> _stopRecording() async {
-    if (!_recording || _saving) return;
+    if (!_recording || _saving || _handedOver) return;
 
     final storage = AppScope.of(context).storage;
+
+    // From here this screen owns the save; a lock no longer needs to
+    // stop anything.
+    _lock.unregisterCapture(this);
 
     setState(() {
       _saving = true;
@@ -113,7 +155,7 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
       final evidence = await storage.addEvidence(
         sourceFile: file,
         type: EvidenceType.audio,
-        originalFileName: 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
+        originalFileName: file.uri.pathSegments.last,
       );
 
       if (!mounted) return;
@@ -127,7 +169,14 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save audio evidence: $e')),
+        // The recording stays in the pending folder and is stored on
+        // the next unlock, so say that rather than implying it is lost.
+        SnackBar(
+          content: Text(
+            'Not saved yet ($e). The recording is kept and will be '
+            'stored the next time you unlock.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -157,6 +206,7 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         backgroundColor: const Color(0xFF090B10),
         foregroundColor: Colors.white,
         title: const Text('Capture Audio'),
+        actions: const [PanicButton()],
       ),
       body: Center(
         child: _saving

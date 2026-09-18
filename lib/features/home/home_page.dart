@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../../services/crypto/key_manager.dart';
+import '../../app/app_scope.dart';
+import '../../app/panic_button.dart';
 import '../auth/presentation/change_pin_page.dart';
 import '../evidence/capture/audio_capture_page.dart';
-import '../evidence/capture/camera_capture_page.dart';
+import '../evidence/capture/in_app_camera_page.dart';
 import '../vault/evidence_vault_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.keyManager});
-
-  final KeyManager keyManager;
+  const HomePage({super.key});
 
   static const Color background = Color(0xFF090B10);
   static const Color cardColor = Color(0xFF11151D);
@@ -26,10 +25,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
-  late final List<Widget> _pages = [
-    const _HomeContent(),
-    const _EvidencePage(),
-    _SettingsPage(keyManager: widget.keyManager),
+  final List<Widget> _pages = const [
+    _HomeContent(),
+    _EvidencePage(),
+    _SettingsPage(),
   ];
 
   @override
@@ -79,9 +78,7 @@ class _HomeContent extends StatelessWidget {
 
   void _openCamera(BuildContext context, {required bool videoMode}) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CameraCapturePage(videoMode: videoMode),
-      ),
+      MaterialPageRoute(builder: (_) => InAppCameraPage(videoMode: videoMode)),
     );
   }
 
@@ -101,7 +98,7 @@ class _HomeContent extends StatelessWidget {
   }
 
   void _panic(BuildContext context) {
-    Navigator.of(context).pushReplacementNamed('/pin');
+    AppScope.of(context).lock.panic();
   }
 
   @override
@@ -331,10 +328,7 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
 
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.notifications_none, color: HomePage.textMuted),
-        ),
+        const PanicButton(color: HomePage.textMuted),
       ],
     );
   }
@@ -729,16 +723,14 @@ class _Helpline extends StatelessWidget {
 // ============================================================
 
 class _SettingsPage extends StatefulWidget {
-  const _SettingsPage({required this.keyManager});
-
-  final KeyManager keyManager;
+  const _SettingsPage();
 
   @override
   State<_SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<_SettingsPage> {
-  bool autoLock = true;
+  // Biometric unlock is P9; this toggle is still inert.
   bool biometric = false;
 
   @override
@@ -746,13 +738,20 @@ class _SettingsPageState extends State<_SettingsPage> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text(
-          'Settings',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 27,
-            fontWeight: FontWeight.w700,
-          ),
+        const Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 27,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            PanicButton(color: HomePage.textMuted),
+          ],
         ),
 
         const SizedBox(height: 5),
@@ -764,32 +763,38 @@ class _SettingsPageState extends State<_SettingsPage> {
 
         const SizedBox(height: 25),
 
-        Container(
-          decoration: BoxDecoration(
-            color: HomePage.cardColor,
-            borderRadius: BorderRadius.circular(18),
-          ),
+        // Material, not a decorated Container: list tiles paint their ink
+        // on the nearest Material, which a coloured box would hide.
+        Material(
+          color: HomePage.cardColor,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              SwitchListTile(
-                value: autoLock,
-                onChanged: (value) {
-                  setState(() {
-                    autoLock = value;
-                  });
+              ListenableBuilder(
+                listenable: AppScope.of(context).lock,
+                builder: (context, _) {
+                  final lock = AppScope.of(context).lock;
+
+                  return SwitchListTile(
+                    value: lock.autoLock,
+                    onChanged: lock.setAutoLock,
+                    title: const Text(
+                      'Auto-lock',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    subtitle: const Text(
+                      'Lock whenever you leave the app or the screen '
+                      'turns off. Pressing Home is then the fastest way '
+                      'to hide everything.',
+                      style: TextStyle(color: HomePage.textMuted),
+                    ),
+                    secondary: const Icon(
+                      Icons.timer_outlined,
+                      color: HomePage.purple,
+                    ),
+                  );
                 },
-                title: const Text(
-                  'Auto-lock',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: const Text(
-                  'Lock after inactivity.',
-                  style: TextStyle(color: HomePage.textMuted),
-                ),
-                secondary: const Icon(
-                  Icons.timer_outlined,
-                  color: HomePage.purple,
-                ),
               ),
 
               const Divider(height: 1, color: Color(0xFF242934)),
@@ -820,11 +825,12 @@ class _SettingsPageState extends State<_SettingsPage> {
 
         const SizedBox(height: 15),
 
-        Container(
-          decoration: BoxDecoration(
-            color: HomePage.cardColor,
-            borderRadius: BorderRadius.circular(18),
-          ),
+        // Material, not a decorated Container: list tiles paint their ink
+        // on the nearest Material, which a coloured box would hide.
+        Material(
+          color: HomePage.cardColor,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
           child: ListTile(
             leading: const Icon(
               Icons.password_outlined,
@@ -845,7 +851,9 @@ class _SettingsPageState extends State<_SettingsPage> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => ChangePinPage(keyManager: widget.keyManager),
+                  builder: (_) => ChangePinPage(
+                    keyManager: AppScope.of(context).keyManager,
+                  ),
                 ),
               );
             },

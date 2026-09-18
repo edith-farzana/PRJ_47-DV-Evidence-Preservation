@@ -322,4 +322,64 @@ void main() {
       );
     });
   });
+
+  // =================================================================
+  // Pending captures
+  // =================================================================
+
+  group('pending captures', () {
+    test(
+      'ingestPending stores each file with the type from its name',
+      () async {
+        final photo = await storage.newPendingFile(EvidenceType.photo, '.jpg');
+        final audio = await storage.newPendingFile(EvidenceType.audio, '.m4a');
+        await photo.writeAsBytes(fakeJpeg());
+        await audio.writeAsString('audio');
+
+        expect(await storage.ingestPending(), 2);
+
+        final types = (await storage.getEvidence()).map((i) => i.type).toSet();
+        expect(types, {EvidenceType.photo, EvidenceType.audio});
+        expect(await storage.pendingDirectory.list().toList(), isEmpty);
+      },
+    );
+
+    test('files it cannot identify are left alone', () async {
+      await storage.pendingDirectory.create(recursive: true);
+      final unknown = File('${storage.pendingDirectory.path}/notes.txt');
+      await unknown.writeAsString('?');
+
+      expect(await storage.ingestPending(), 0);
+      expect(await unknown.exists(), isTrue);
+    });
+
+    test('stage moves a capture into the pending folder', () async {
+      final shot = await writeSource('CAP123.jpg', fakeJpeg());
+
+      final staged = await storage.stage(shot, EvidenceType.photo);
+
+      expect(await shot.exists(), isFalse);
+      expect(staged.path, startsWith(storage.pendingDirectory.path));
+      expect(staged.path, endsWith('.jpg'));
+      expect(staged.uri.pathSegments.last, startsWith('photo_'));
+    });
+
+    test(
+      'a pending file is not stored twice while its save is running',
+      () async {
+        final photo = await storage.newPendingFile(EvidenceType.photo, '.jpg');
+        await photo.writeAsBytes(fakeJpeg());
+
+        final save = storage.addEvidence(
+          sourceFile: photo,
+          type: EvidenceType.photo,
+        );
+        final ingested = await storage.ingestPending();
+        await save;
+
+        expect(ingested, 0);
+        expect(await storage.getEvidence(), hasLength(1));
+      },
+    );
+  });
 }

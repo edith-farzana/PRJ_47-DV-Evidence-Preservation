@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../app/panic_button.dart';
 import '../../models/evidence/evidence_item.dart';
 import '../../services/storage/evidence_index.dart';
 
@@ -72,6 +73,7 @@ class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
         backgroundColor: const Color(0xFF090B10),
         foregroundColor: Colors.white,
         title: const Text('My Evidence'),
+        actions: const [PanicButton()],
       ),
       body: FutureBuilder<List<EvidenceItem>>(
         future: _evidenceFuture,

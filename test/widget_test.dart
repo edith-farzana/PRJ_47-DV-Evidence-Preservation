@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:secure_evidence_app/app/app.dart';
+import 'package:secure_evidence_app/app/app_lock_controller.dart';
+import 'package:secure_evidence_app/app/panic_button.dart';
 import 'package:secure_evidence_app/features/auth/presentation/pin_page.dart';
 import 'package:secure_evidence_app/features/auth/presentation/setup_page.dart';
 import 'package:secure_evidence_app/features/calculator/presentation/calculator_page.dart';
+import 'package:secure_evidence_app/features/home/home_page.dart';
 import 'package:secure_evidence_app/services/crypto/key_manager.dart';
 import 'package:secure_evidence_app/services/storage/evidence_storage.dart';
 
@@ -19,13 +22,16 @@ SecureEvidenceApp buildApp({String? unlockSequence}) {
   final keyManager = KeyManager(store);
 
   return SecureEvidenceApp(
-    keyManager: keyManager,
-    storage: EvidenceStorage(
-      baseDirectory: Directory('${Directory.systemTemp.path}/unused'),
+    lock: AppLockController(
       keyManager: keyManager,
+      storage: EvidenceStorage(
+        baseDirectory: Directory('${Directory.systemTemp.path}/unused'),
+        keyManager: keyManager,
+        store: store,
+      ),
       store: store,
+      unlockSequence: unlockSequence,
     ),
-    unlockSequence: unlockSequence,
   );
 }
 
@@ -76,5 +82,65 @@ void main() {
 
     expect(find.byType(PinPage), findsNothing);
     expect(find.byType(CalculatorPage), findsOneWidget);
+  });
+
+  testWidgets('panic from home returns to a cleared calculator', (
+    tester,
+  ) async {
+    usePhoneScreen(tester);
+
+    final store = FakeSecureStore();
+    final keyManager = KeyManager(store, kdfIterations: 1000);
+    final workspace = await tester.runAsync(
+      () => Directory.systemTemp.createTemp('panic_test_'),
+    );
+    addTearDown(() => workspace!.delete(recursive: true));
+
+    final lock = AppLockController(
+      keyManager: keyManager,
+      storage: EvidenceStorage(
+        baseDirectory: workspace!,
+        keyManager: keyManager,
+        store: store,
+      ),
+      store: store,
+      unlockSequence: '7×3-1=',
+    );
+
+    await tester.runAsync(() async {
+      await keyManager.setUp(pin: '1234', unlockSequence: '7×3-1=');
+      keyManager.lock();
+    });
+
+    await tester.pumpWidget(SecureEvidenceApp(lock: lock));
+
+    // Leave something on the display, so "cleared" means something.
+    for (final key in ['4', '2']) {
+      await tester.tap(find.widgetWithText(InkWell, key).first);
+      await tester.pump();
+    }
+    expect(find.text('42'), findsOneWidget);
+
+    lock.openPin();
+    await tester.runAsync(() => keyManager.unlock('1234'));
+    lock.onUnlocked();
+    await tester.pump();
+
+    expect(find.byType(HomePage), findsOneWidget);
+    expect(keyManager.isUnlocked, isTrue);
+
+    await tester.tap(find.byType(PanicButton).first);
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+
+    expect(find.byType(HomePage), findsNothing);
+    expect(find.byType(CalculatorPage), findsOneWidget);
+    // The display, not the "0" key.
+    final display = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.style?.fontSize == 64,
+    );
+    expect(tester.widget<Text>(display).data, '0');
+    expect(find.text('42'), findsNothing);
+    expect(keyManager.isUnlocked, isFalse);
   });
 }

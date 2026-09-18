@@ -1,7 +1,7 @@
 # Secure Evidence — Development Checklist
 
 **Branch for this work:** `feature/security-layer`
-**Last updated:** 2026-09-18
+**Last updated:** 2026-09-19
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
 
@@ -246,31 +246,33 @@ Makes "read-only" and "encrypted at rest" true locally.
 Correctness bugs with direct safety consequences for the people this app is for.
 
 ### 1. Panic button (currently crashes)
-- [ ] `lib/app/app_lock_controller.dart` (new) — a `ChangeNotifier` holding `locked` / `showPin` / `unlocked`, replacing the three `setState` booleans in `_SecureEvidenceAppState`
-- [ ] Panic: zero keys in memory → pop to root → calculator with a cleared display
-- [ ] Fix `lib/features/home/home_page.dart:100` — `pushReplacementNamed('/pin')` throws because no named routes are registered
-- [ ] Add a long-press trigger so panic works without navigating home first
+- [x] `lib/app/app_lock_controller.dart` (new) — a `ChangeNotifier` holding `locked` / `showPin` / `unlocked`, replacing the three `setState` booleans in `_SecureEvidenceAppState`
+- [x] Panic: zero keys in memory → pop to root → calculator with a cleared display
+- [x] Fix `lib/features/home/home_page.dart:100` — `pushReplacementNamed('/pin')` throws because no named routes are registered
+- [x] ~~Add a long-press trigger~~ — replaced by a one-tap `PanicButton` (`lib/app/panic_button.dart`) in the top bar of every unlocked screen, so panic works from anywhere without a hidden gesture to remember. A plain "close" icon, not a red PANIC button, so it does not give the app away
 
 ### 2. Stop photos leaking into the gallery
-- [ ] `lib/features/evidence/capture/in_app_camera_page.dart` (new) — in-app capture using the `camera` package (already in `pubspec.yaml`, currently unused), writing straight to app temp
-- [ ] Retire `image_picker` for camera capture in `camera_capture_page.dart`
+- [x] `lib/features/evidence/capture/in_app_camera_page.dart` (new) — in-app capture using the `camera` package (already in `pubspec.yaml`, currently unused), writing straight to app temp
+- [x] Retire `image_picker` for camera capture in `camera_capture_page.dart`
 
 ### 3. Screen privacy
-- [ ] `FLAG_SECURE` in `MainActivity.kt` — blocks screenshots and the recents-screen thumbnail
+- [x] `FLAG_SECURE` in `MainActivity.kt` — blocks screenshots and the recents-screen thumbnail
 
 ### 4. Auto-lock
-- [ ] `WidgetsBindingObserver` on `AppLifecycleState.paused` / `inactive` → lock immediately, drop keys
-- [ ] Wire the currently-dead auto-lock toggle in `_SettingsPageState` and persist the preference
+- [x] `WidgetsBindingObserver` on `AppLifecycleState.paused` / `inactive` → lock immediately, drop keys
+- [x] Wire the currently-dead auto-lock toggle in `_SettingsPageState` and persist the preference
 
-### Tests — `test/app/app_lock_controller_test.dart`, `test/widget/panic_test.dart` (new)
-- [ ] Panic transitions unlocked → calculator and clears the in-memory key reference
-- [ ] After panic, reaching the vault again requires the PIN
-- [ ] Lifecycle `paused` locks when auto-lock is on
-- [ ] Lifecycle `paused` does not lock when auto-lock is off
-- [ ] Widget test: pump app → unlock → panic → `CalculatorPage` showing and display reads `0`
-- [ ] Existing `test/widget_test.dart` smoke test still passes
+### Tests — `test/app/app_lock_controller_test.dart` (new), panic widget test in `test/widget_test.dart`
+- [x] Panic transitions unlocked → calculator and clears the in-memory key reference
+- [x] After panic, reaching the vault again requires the PIN
+- [x] Lifecycle `paused` locks when auto-lock is on
+- [x] Lifecycle `paused` does not lock when auto-lock is off
+- [x] Widget test: pump app → unlock → panic → `CalculatorPage` showing and display reads `0`
+- [x] Existing `test/widget_test.dart` smoke test still passes
 
-**Gate:** `flutter test` green · manual device pass on all four items — **especially: capture a photo, then open a file manager and confirm it is not in DCIM** · commit `P4: safety fixes`
+> **Found by the panic widget test:** the settings cards wrapped `ListTile`s in a coloured `Container`, which trips a Flutter debug assertion. Fixed by using `Material` for those cards.
+
+**Gate:** ✅ `flutter test` green (103/103), analyzer clean · ⏳ manual device pass on all four items — **especially: capture a photo, then open a file manager and confirm it is not in DCIM** · ✅ commit `P4: safety fixes`
 
 ---
 
@@ -410,7 +412,7 @@ Update this after every gate.
 | P1 Crypto core | 14% | ✅ Gate passed | 23/23 tests green, analyzer clean |
 | P2 Key & PIN management | 11% | ✅ Built, device check pending | 62/62 tests green, APK builds; manual device pass outstanding |
 | P3 Storage hardening | 9% | ✅ Built, device check pending | 85/85 tests green, APK builds; manual device pass outstanding |
-| P4 Safety fixes | 9% | Not started | — |
+| P4 Safety fixes | 9% | ✅ Built, device check pending | 103/103 tests green; manual device pass (DCIM check) outstanding |
 | P5 Firebase + rules | 13% | Not started | — |
 | P6 Audit log | 10% | Not started | — |
 | P7 Verification & export | 13% | Not started | — |
