@@ -2,14 +2,14 @@
 
 **Project:** Secure Evidence — domestic violence evidence preservation
 **Status of this document:** design specification. Sections are marked with their implementation status.
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-18
 
 > **Implementation status legend**
 > 🔴 **Not built** — specified here, not yet in code
 > 🟡 **Partial** — some of it exists
 > 🟢 **Built** — implemented and covered by tests
 >
-> As of 2026-09-12 almost everything in this document is 🔴. See `DEVELOPMENT_CHECKLIST.md` for the build order. This document describes the target design so that implementation has something to be checked against — it is **not** a description of the current app.
+> As of 2026-09-18 the crypto core (P1) and key & PIN management (P2) are built and tested. Captured evidence is **not yet encrypted on disk**. That happens when storage is routed through them in P3. See `DEVELOPMENT_CHECKLIST.md` for the build order. This document describes the target design so that implementation has something to be checked against — it is **not** a description of the current app.
 
 ---
 
@@ -43,7 +43,7 @@ Stating these honestly is part of the design, not an admission of failure.
 
 ## 2. Cryptographic design
 
-### 2.1 Algorithms 🔴
+### 2.1 Algorithms 🟡
 
 | Purpose | Algorithm | Parameters |
 |---|---|---|
@@ -58,7 +58,7 @@ Stating these honestly is part of the design, not an admission of failure.
 
 **Why a nonce per file, never reused:** GCM catastrophically loses confidentiality if a nonce is reused under the same key. Each file gets both a fresh key and a fresh nonce, so this cannot happen even by accident.
 
-### 2.2 Key hierarchy (envelope encryption) 🔴
+### 2.2 Key hierarchy (envelope encryption) 🟢
 
 ```
   User PIN  +  salt (random, 128-bit, stored in plain)
@@ -100,13 +100,25 @@ Stating these honestly is part of the design, not an admission of failure.
 | SHA-256 hashes | Evidence metadata + Firestore | Plain — used for verification |
 | Evidence blob | Local `<uuid>.enc` + Firebase Storage | AES-256-GCM |
 
-### 2.3 The AAD binding 🔴
+**Implementation:** `lib/services/crypto/key_manager.dart`. The salt, iteration count and wrapped master key are stored as **one** record (`km.v1.vault`), written in a single call, so a crash can never leave a salt that doesn't match its wrapped key. The wrap uses a fixed AAD label (`secure-evidence/master-key/v1`). PBKDF2 runs in a background isolate.
+
+#### The Keystore layer: why a 4-digit PIN is acceptable
+
+A 4-digit PIN has only 10,000 values. PBKDF2 makes each guess slower, but 10,000 slow guesses is still minutes of work for anyone holding the wrapped key. The defence is that **nobody holds it off the device**:
+
+- `flutter_secure_storage` encrypts every stored value with an AES key that is itself wrapped by a **non-exportable RSA key in the Android Keystore**. The PIN-wrapped master key is therefore wrapped twice, and the outer layer can only be removed by this phone's Keystore.
+- Backups are disabled (`allowBackup="false"`, and `data_extraction_rules.xml` excludes everything from cloud backup and device-to-device transfer), so the record never leaves the phone that way either.
+- Guesses therefore have to go through the app on the phone, where the lockout in §4.2 applies.
+
+**The limit, stated plainly:** this defeats an attacker with a **copy** of the storage (backup, forensic image of the app's files, a different phone). It does **not** defeat an attacker with **root on the live phone**. They can ask the Keystore to remove the outer layer, then try all 10,000 PINs offline, and they can reset the lockout counter. That is the "rooted device" case in §1, which we already list as out of scope. Stronger protection needs a hardware-enforced attempt counter (as the Android lock screen uses), which the platform does not offer to apps.
+
+### 2.3 The AAD binding 🟢
 
 The plaintext SHA-256 is passed as **Additional Authenticated Data** to AES-GCM. It is not encrypted, but it is authenticated: decryption fails if the hash recorded in metadata does not match the hash that was bound in at encryption time.
 
 This closes an otherwise real attack: without it, someone could swap the stored hash to match a substituted file, and verification would pass. With AAD binding, ciphertext and hash are cryptographically welded together — you cannot alter one without invalidating the other.
 
-### 2.4 Integrity verification 🔴
+### 2.4 Integrity verification 🟡
 
 Two hashes are recorded per item:
 
@@ -196,20 +208,21 @@ Backed-up items get both properties. The UI must state this difference plainly a
 | Control | Status | Notes |
 |---|---|---|
 | Decoy calculator front-end | 🟢 Built | Fully functional calculator, not a stub — it survives casual use |
-| Hidden unlock sequence | 🟡 Partial | Works, but currently hardcoded `1+2+3+4=` in source. P2 makes it user-set |
+| Hidden unlock sequence | 🟢 Built | User-chosen at first run, stored in secure storage. Must contain an operator, so ordinary calculator use can't trigger it by accident |
 | Evidence never in device gallery | 🔴 Not built | **Current code uses `image_picker`, which hands off to the system camera app; captures can persist in DCIM.** P4 replaces this with in-app capture |
 | Screenshot / recents blocking | 🔴 Not built | `FLAG_SECURE`, P4 |
 | Panic return to calculator | 🔴 Broken | `home_page.dart:100` calls an unregistered named route and throws. P4 |
 | Auto-lock on backgrounding | 🔴 Not built | P4 |
 | Duress PIN → decoy vault | 🔴 Not built | P9 |
 
-### 4.2 Access control 🔴
+### 4.2 Access control 🟡
 
-- PIN is **never stored**. Verification is by attempting to unwrap the master key — a wrong PIN simply fails.
-- Failed attempts trigger exponential backoff, persisted so that restarting the app does not reset the counter.
-- The master key is zeroed in memory on lock, on panic, and on backgrounding.
-
-> **Current state:** the PIN is the hardcoded string `2580` in `pin_validator.dart`. This is development scaffolding and is removed in P2.
+- 🟢 PIN is **never stored**. Verification is by attempting to unwrap the master key — a wrong PIN simply fails GCM authentication.
+- 🟢 **Lockout:** 4 free attempts, then 30s → 1m → 2m → 5m → 15m → 1h (repeating). The counter and lock time are persisted in secure storage, so restarting the app does not reset them. The attempt is recorded **before** the slow key derivation starts, so killing the app mid-guess doesn't give a free try.
+- 🟢 **Change PIN** goes through the same lockout. Otherwise it would be a way round it.
+- 🟢 **No wipe after N failures, deliberately.** In most apps that's a security feature. Here it would hand an abuser a way to destroy the evidence just by typing wrong PINs.
+- 🟡 The master key is zeroed in memory on lock (`SecretKeyData.destroy()` overwrites the bytes). Locking on panic and on backgrounding comes in P4.
+- 🟢 A corrupted key record fails loudly (`KeyStoreCorruptedException`) instead of silently creating a new master key, which would orphan every existing file.
 
 ### 4.3 Audit log 🔴
 
@@ -232,7 +245,9 @@ Stated plainly, because a security document that claims no weaknesses is not cre
 5. **We cannot guarantee court admissibility.** The system is designed to *support* integrity, authenticity, provenance and chain of custody. Whether evidence is admitted depends on jurisdiction, collection circumstances, and evidence law — not on software.
 6. **Metadata leaks some information.** File sizes, capture timestamps and counts are visible to the backend even though content is not. Padding and timestamp coarsening are not implemented.
 7. **No secure-delete guarantee on flash storage.** Wear levelling means overwriting a file does not reliably destroy the old blocks. Encryption-at-rest mitigates this: deleting the key matters more than deleting the bytes.
-8. **Local-only evidence does not survive loss of the phone.** Following the 2026-09-16 decision, media is uploaded only when the user opts in per item. For everything else the device holds the only copy, and destroying it destroys the evidence — the cloud record then proves only that the evidence once existed and what its hash was. See §3.3.
+8. **The lockout uses the phone's clock.** Someone who moves the system clock forward can shorten a timeout. Each guess still costs a full key derivation and is still counted, so this makes guessing slower, not impossible. Root on the device bypasses the lockout entirely (see §2.2).
+9. **Some key copies cannot be zeroed.** PBKDF2 runs in a separate isolate, and the Dart VM copies bytes between isolates; those copies are freed but not overwritten. Dart does not offer control over this.
+10. **Local-only evidence does not survive loss of the phone.** Following the 2026-09-16 decision, media is uploaded only when the user opts in per item. For everything else the device holds the only copy, and destroying it destroys the evidence — the cloud record then proves only that the evidence once existed and what its hash was. See §3.3.
 
 ---
 

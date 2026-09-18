@@ -158,33 +158,48 @@ The heart of the project. Everything after this depends on it, which is why it g
 
 Replaces the hardcoded `2580`. This is where the app stops being a mockup.
 
+> **Decision (2026-09-18):** keep the 4-digit PIN, and bind the PIN-wrapped
+> master key to the Android Keystore (option 1) rather than moving to longer
+> PINs. 10,000 PINs are only guessable on the device itself, where the lockout
+> applies. Rationale and the root-on-device limit are in `docs/SECURITY.md` §2.2.
+
 ### Implementation — `lib/services/crypto/key_manager.dart` (new)
-- [ ] **Master key (KEK):** random 256 bits, generated once at first run
-- [ ] **PIN-derived key:** PBKDF2-HMAC-SHA256 at **≥150,000 iterations** (or Argon2id) over PIN + random 128-bit salt
-- [ ] Master key is **wrapped by the PIN-derived key**, stored in `flutter_secure_storage` (Android Keystore-backed)
-- [ ] The PIN itself is **never stored** — a wrong PIN simply fails to unwrap the master key
-- [ ] Master key lives in memory only while unlocked; zeroed on lock and on panic
+- [x] **Master key (KEK):** random 256 bits, generated once at first run
+- [x] **PIN-derived key:** PBKDF2-HMAC-SHA256 at **150,000 iterations** over PIN + random 128-bit salt, run in a background isolate
+- [x] Master key is **wrapped by the PIN-derived key**, stored in `flutter_secure_storage`, whose values are encrypted under a non-exportable Keystore key (`lib/services/crypto/secure_store.dart`)
+- [x] Salt, iteration count and wrapped key written as **one** record, so a crash can't leave them mismatched
+- [x] The PIN itself is **never stored** — a wrong PIN simply fails to unwrap the master key
+- [x] Master key lives in memory only while unlocked; `lock()` overwrites its bytes. *(Locking on panic is P4.)*
+- [x] Android backups and device-to-device transfer disabled (`AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`)
 
 ### Implementation — auth flow
-- [ ] `lib/features/auth/domain/pin_validator.dart` — delete `secretPin = '2580'` and `matchesSecret()`. Keep format validation (its 8 tests must still pass). Verification moves to `KeyManager.unlock(pin)`
-- [ ] `lib/features/auth/presentation/pin_page.dart` — first-run "set your PIN" flow (enter + confirm), then normal unlock
-- [ ] Failed-attempt lockout with exponential backoff; counter persisted so a restart does not reset it
-- [ ] `lib/features/calculator/presentation/calculator_page.dart` — `_developmentSecret = '1+2+3+4='` becomes user-configurable, stored in secure storage
-- [ ] `lib/features/home/home_page.dart` — wire the dead "Change PIN" tile: re-wrap the master key under a new PIN, **without** re-encrypting any evidence
-- [ ] Document in `docs/SECURITY.md`: keys never leave the device, so a forgotten PIN means permanently unrecoverable evidence. Recovery key is P7
+- [x] `lib/features/auth/domain/pin_validator.dart` — `secretPin = '2580'` and `matchesSecret()` deleted. Format validation kept; its 8 tests still pass
+- [x] `lib/features/auth/presentation/setup_page.dart` (new) — first-run PIN + confirm + unlock sequence, with a forgotten-PIN warning
+- [x] `lib/features/auth/presentation/pin_page.dart` — unlocks via `KeyManager.unlock()`, spinner during the KDF, live lockout countdown
+- [x] Failed-attempt lockout: 4 free, then 30s → 1m → 2m → 5m → 15m → 1h; persisted, survives restart; attempt counted before the KDF runs. **No wipe after N failures**, on purpose
+- [x] `lib/features/calculator/presentation/calculator_page.dart` — `_developmentSecret` removed; the sequence is user-chosen (`lib/features/auth/domain/unlock_sequence.dart`) and stored in secure storage
+- [x] `lib/features/home/home_page.dart` + `change_pin_page.dart` (new) — "Change PIN" re-wraps the master key under a new PIN and salt, **without** re-encrypting any evidence; wrong current PIN counts toward the lockout
+- [x] Documented in `docs/SECURITY.md`: Keystore layer and its limit (§2.2), lockout (§4.2), clock and isolate-copy limits (§5)
 
-> **Worth being able to explain live:** changing the PIN re-wraps one 256-bit key, not 4GB of video. That is the entire reason for envelope encryption, and it is the kind of thing examiners probe.
+### Tests — `test/services/key_manager_test.dart` (new, 19 cases) + widget and sequence tests
+- [x] Correct PIN unwraps the master key, and that key decrypts a file made by `CryptoService`
+- [x] Wrong PIN fails to unwrap
+- [x] **PIN change:** files encrypted under the old PIN still decrypt afterwards; old PIN stops working
+- [x] Same PIN + different salt → different stored key
+- [x] The PIN appears nowhere in storage
+- [x] Lockout backoff increases with each failure, caps at 1h, and survives a simulated restart; a correct PIN during lockout is refused
+- [x] KDF iteration count is at least 150,000 (guard test; ~0.7s on the dev machine)
+- [x] Corrupted key record fails loudly rather than resetting
+- [x] The existing 8 `PinValidator` tests still pass
+- [x] Widget: first launch shows setup; the chosen sequence opens the PIN screen; `1+2+3+4=` no longer does
+- [x] `UnlockSequence`: normalization and validation (8 cases)
 
-### Tests — `test/services/key_manager_test.dart` (new)
-- [ ] Correct PIN unwraps the master key
-- [ ] Wrong PIN fails to unwrap
-- [ ] **PIN change:** files encrypted under the old PIN still decrypt afterwards
-- [ ] Same PIN + different salt → different derived key
-- [ ] Lockout backoff increases with each failure and survives a simulated restart
-- [ ] KDF iteration count is at least the configured minimum (guards against someone lowering it for test speed and forgetting)
-- [ ] The existing 8 `PinValidator` tests still pass
-
-**Gate:** `flutter test` green · manual first-run, unlock and change-PIN on device · commit `P2: key and PIN management`
+**Gate:**
+- [x] `flutter analyze` clean
+- [x] `flutter test` green — 62/62
+- [x] `flutter build apk --debug` succeeds
+- [ ] **Manual on a real device:** first-run setup, custom sequence, wrong PIN ×5 → countdown, kill app → still locked out, Change PIN → relaunch → new PIN works. **Time the unlock**: if 150k iterations takes more than ~3s, raise it rather than quietly lowering the count
+- [x] Committed as `P2: key and PIN management`
 
 ---
 
@@ -382,7 +397,7 @@ Update this after every gate.
 |---|---|---|---|
 | P0 Planning & docs | 4% | In progress | 5/6 tasks (teammate sign-off pending) |
 | P1 Crypto core | 14% | ✅ Gate passed | 23/23 tests green, analyzer clean |
-| P2 Key & PIN management | 11% | Not started | — |
+| P2 Key & PIN management | 11% | ✅ Built, device check pending | 62/62 tests green, APK builds; manual device pass outstanding |
 | P3 Storage hardening | 9% | Not started | — |
 | P4 Safety fixes | 9% | Not started | — |
 | P5 Firebase + rules | 13% | Not started | — |
@@ -392,7 +407,7 @@ Update this after every gate.
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~41%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%)
+**Current: ~52%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%) + P2 (11%, pending the on-device check)
 **Review target: 65%**
 
 ---

@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../../services/crypto/key_manager.dart';
 import '../domain/pin_validator.dart';
 
 class PinPage extends StatefulWidget {
+  final KeyManager keyManager;
   final VoidCallback onSuccess;
 
-  const PinPage({super.key, required this.onSuccess});
+  const PinPage({super.key, required this.keyManager, required this.onSuccess});
 
   @override
   State<PinPage> createState() => _PinPageState();
@@ -16,17 +20,74 @@ class _PinPageState extends State<PinPage> {
   final PinValidator _validator = const PinValidator();
 
   String _error = '';
+  bool _busy = false;
+  DateTime? _lockedUntil;
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // A lockout from before a restart still applies.
+    widget.keyManager.lockedUntil().then((until) {
+      if (mounted && until != null) {
+        _startLockout(until);
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _ticker?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  void _submitPin() {
+  bool get _lockedOut => _lockedUntil != null;
+
+  void _startLockout(DateTime until) {
+    _ticker?.cancel();
+
+    setState(() {
+      _lockedUntil = until;
+      _error = '';
+    });
+
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        return;
+      }
+
+      if (DateTime.now().isAfter(until)) {
+        _ticker?.cancel();
+        setState(() => _lockedUntil = null);
+        return;
+      }
+
+      setState(() {});
+    });
+  }
+
+  String _lockoutMessage() {
+    final remaining = _lockedUntil!.difference(DateTime.now());
+    final seconds = remaining.inSeconds + 1;
+
+    if (seconds < 60) {
+      return 'Too many attempts. Try again in ${seconds}s.';
+    }
+
+    return 'Too many attempts. Try again in ${remaining.inMinutes + 1} min.';
+  }
+
+  Future<void> _submitPin() async {
+    if (_busy || _lockedOut) {
+      return;
+    }
+
     final pin = _controller.text.trim();
 
-    // First check whether the input is structurally valid.
+    // First check whether the input is structurally valid. A malformed
+    // PIN is not an attempt and does not count toward the lockout.
     if (!_validator.isValid(pin)) {
       setState(() {
         _error = _validator.validate(pin) ?? 'Invalid PIN.';
@@ -36,20 +97,36 @@ class _PinPageState extends State<PinPage> {
       return;
     }
 
-    // Then check whether it is the actual secret PIN.
-    if (_validator.matchesSecret(pin)) {
-      FocusScope.of(context).unfocus();
+    setState(() {
+      _busy = true;
+      _error = '';
+    });
 
-      widget.onSuccess();
+    // The PIN is correct only if it unwraps the master key.
+    final result = await widget.keyManager.unlock(pin);
+
+    if (!mounted) {
       return;
     }
 
-    // Four digits, but wrong PIN.
-    setState(() {
-      _error = 'Incorrect PIN';
-    });
-
     _controller.clear();
+    setState(() => _busy = false);
+
+    switch (result.status) {
+      case UnlockStatus.success:
+        FocusScope.of(context).unfocus();
+        widget.onSuccess();
+      case UnlockStatus.wrongPin:
+        final left = KeyManager.freeAttempts - result.failedAttempts;
+        setState(() {
+          _error = left > 0
+              ? 'Incorrect PIN. $left ${left == 1 ? 'attempt' : 'attempts'} '
+                    'before a timeout.'
+              : 'Incorrect PIN.';
+        });
+      case UnlockStatus.lockedOut:
+        _startLockout(result.lockedUntil!);
+    }
   }
 
   @override
@@ -99,6 +176,7 @@ class _PinPageState extends State<PinPage> {
 
                 TextField(
                   controller: _controller,
+                  enabled: !_busy && !_lockedOut,
                   keyboardType: TextInputType.number,
                   obscureText: true,
                   maxLength: 4,
@@ -136,11 +214,12 @@ class _PinPageState extends State<PinPage> {
                   onSubmitted: (_) => _submitPin(),
                 ),
 
-                if (_error.isNotEmpty) ...[
+                if (_error.isNotEmpty || _lockedOut) ...[
                   const SizedBox(height: 10),
 
                   Text(
-                    _error,
+                    _lockedOut ? _lockoutMessage() : _error,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.redAccent,
                       fontSize: 14,
@@ -154,7 +233,7 @@ class _PinPageState extends State<PinPage> {
                   width: double.infinity,
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: _submitPin,
+                    onPressed: _busy || _lockedOut ? null : _submitPin,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF6C3CEB),
                       foregroundColor: Colors.white,
@@ -162,13 +241,22 @@ class _PinPageState extends State<PinPage> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    child: const Text(
-                      'Continue',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Continue',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
               ],

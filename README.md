@@ -16,16 +16,15 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 
 **Working today**
 - ✅ Functional decoy calculator front-end with hidden unlock sequence
-- ✅ PIN gate with format validation (unit tested)
+- ✅ User-chosen PIN and unlock sequence; the PIN unlocks a Keystore-protected master key, with persistent lockout (unit tested)
 - ✅ Photo, video and audio capture
 - ✅ Local evidence store with append-only discipline
 - ✅ Evidence vault listing with timestamps and metadata
 - ✅ Emergency helpline directory
 
 **In progress**
-- 🔴 Client-side encryption (AES-256-GCM, envelope key hierarchy)
-- 🔴 SHA-256 integrity hashing
-- 🔴 Real key and PIN management (Android Keystore)
+- 🟡 Client-side encryption (AES-256-GCM, envelope key hierarchy): built and tested, but captured evidence is not routed through it until P3
+- 🟡 SHA-256 integrity hashing: built and tested, wired in with P3
 - 🔴 Firebase backend with server-enforced immutability
 - 🔴 Tamper-evident audit log
 

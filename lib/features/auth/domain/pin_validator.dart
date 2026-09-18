@@ -1,7 +1,8 @@
+/// Format checks only. Whether a PIN is *correct* is decided by
+/// KeyManager.unlock(), which tries to unwrap the master key with it --
+/// there is no stored PIN to compare against.
 class PinValidator {
   const PinValidator();
-
-  static const String secretPin = '2580';
 
   /// Returns null when the PIN format is valid.
   /// Returns an error message when the PIN format is invalid.
@@ -24,10 +25,5 @@ class PinValidator {
   /// Checks whether the PIN has a valid 4-digit format.
   bool isValid(String pin) {
     return validate(pin) == null;
-  }
-
-  /// Checks whether the supplied PIN is the actual secret PIN.
-  bool matchesSecret(String pin) {
-    return pin == secretPin;
   }
 }

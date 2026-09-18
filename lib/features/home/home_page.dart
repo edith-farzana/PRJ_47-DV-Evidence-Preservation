@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../services/crypto/key_manager.dart';
+import '../auth/presentation/change_pin_page.dart';
 import '../evidence/capture/audio_capture_page.dart';
 import '../evidence/capture/camera_capture_page.dart';
 import '../vault/evidence_vault_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, required this.keyManager});
+
+  final KeyManager keyManager;
 
   static const Color background = Color(0xFF090B10);
   static const Color cardColor = Color(0xFF11151D);
@@ -22,10 +26,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = const [
-    _HomeContent(),
-    _EvidencePage(),
-    _SettingsPage(),
+  late final List<Widget> _pages = [
+    const _HomeContent(),
+    const _EvidencePage(),
+    _SettingsPage(keyManager: widget.keyManager),
   ];
 
   @override
@@ -725,7 +729,9 @@ class _Helpline extends StatelessWidget {
 // ============================================================
 
 class _SettingsPage extends StatefulWidget {
-  const _SettingsPage();
+  const _SettingsPage({required this.keyManager});
+
+  final KeyManager keyManager;
 
   @override
   State<_SettingsPage> createState() => _SettingsPageState();
@@ -836,7 +842,13 @@ class _SettingsPageState extends State<_SettingsPage> {
               Icons.chevron_right,
               color: HomePage.textMuted,
             ),
-            onTap: () {},
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ChangePinPage(keyManager: widget.keyManager),
+                ),
+              );
+            },
           ),
         ),
       ],
