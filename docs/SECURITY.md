@@ -9,7 +9,7 @@
 > 🟡 **Partial** — some of it exists
 > 🟢 **Built** — implemented and covered by tests
 >
-> As of 2026-09-18 the crypto core (P1) and key & PIN management (P2) are built and tested. Captured evidence is **not yet encrypted on disk**. That happens when storage is routed through them in P3. See `DEVELOPMENT_CHECKLIST.md` for the build order. This document describes the target design so that implementation has something to be checked against — it is **not** a description of the current app.
+> As of 2026-09-18 the crypto core (P1), key & PIN management (P2) and encrypted on-device storage (P3) are built and tested. The backend, audit log, evidence viewing and export (P5–P7) are not. See `DEVELOPMENT_CHECKLIST.md` for the build order. This document describes the target design so that implementation has something to be checked against — it is **not** a description of the current app.
 
 ---
 
@@ -131,22 +131,26 @@ Verification re-decrypts, re-hashes the plaintext, and compares to `plaintextSha
 
 ## 3. Storage model
 
-### 3.1 On-device 🔴
+### 3.1 On-device 🟢
 
 ```
 <app documents>/
   evidence/
-    <uuid>.enc        ← AES-256-GCM encrypted blob
+    <uuid>.enc        ← AES-256-GCM encrypted blob (no extension)
     ...
-  index.enc           ← AES-256-GCM encrypted metadata index
+    index.enc         ← AES-256-GCM encrypted list of evidence records
 ```
 
-- **No plaintext evidence is ever written to the evidence directory.** Viewing decrypts to a temp file, deleted on screen dispose.
-- The source capture file is **securely deleted** after a verified encrypted write.
-- The index is encrypted and carries a running hash, so silent edits are detectable.
+Implementation: `lib/services/storage/evidence_storage.dart`, `evidence_index.dart`.
+
+- **No plaintext evidence is ever written to the evidence directory.** Blob names carry no file extension, and original filenames exist only inside the encrypted index.
+- **Capture order** (the last step can't be undone, so everything before it must succeed): encrypt → decrypt again and compare SHA-256 → record in the index → overwrite the source with zeros and delete it. If any of the first three fail, the source is kept and the partial blob is removed.
+- **The index** is encrypted under a key derived from the master key with HKDF-SHA256 (`info: evidence-index/v1`), so it never shares a key with any evidence file. It is replaced atomically (write temp, rename).
+- **Rollback detection.** GCM catches any edit to `index.enc`, but not someone putting back an **older, genuine** copy to hide evidence captured since. So a seal, the item count plus the SHA-256 of the current `index.enc`, is kept in Keystore-backed secure storage, and every load checks the file against it. A crash mid-write is handled: the seal records the pending hash before the rename, so either file state still loads.
+- **Fails loudly.** An index that is missing, altered, rolled back or undecryptable raises `EvidenceIndexCorruptedException`, and the vault shows a warning. It never shows "No evidence yet", which would tell a survivor their evidence is gone when the files are still there.
 - **Append-only by construction:** `EvidenceStorage` deliberately exposes no `deleteEvidence()` or `updateEvidence()`.
 
-> **Current state 🟡:** files are stored *unencrypted* in `<app documents>/evidence/`, and the index is plaintext JSON in `SharedPreferences`. The append-only discipline is already in place but is a convention, not an enforced mechanism. P3 fixes this.
+> **Not yet built:** viewing evidence (decrypt to a temp file, deleted on dispose) is P7. The source overwrite is best-effort; see §5 item 7. Photos taken through `image_picker` may also persist in the system gallery until P4 replaces it.
 
 ### 3.2 Backend — Firebase 🔴
 

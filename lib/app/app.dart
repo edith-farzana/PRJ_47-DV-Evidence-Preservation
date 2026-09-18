@@ -5,15 +5,19 @@ import '../features/auth/presentation/setup_page.dart';
 import '../features/calculator/presentation/calculator_page.dart';
 import '../features/home/home_page.dart';
 import '../services/crypto/key_manager.dart';
+import '../services/storage/evidence_storage.dart';
+import 'app_scope.dart';
 
 class SecureEvidenceApp extends StatefulWidget {
   const SecureEvidenceApp({
     super.key,
     required this.keyManager,
+    required this.storage,
     required this.unlockSequence,
   });
 
   final KeyManager keyManager;
+  final EvidenceStorage storage;
 
   /// Null until first-run setup has been completed.
   final String? unlockSequence;
@@ -71,21 +75,25 @@ class _SecureEvidenceAppState extends State<SecureEvidenceApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Secure Evidence',
+    return AppScope(
+      keyManager: widget.keyManager,
+      storage: widget.storage,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Secure Evidence',
 
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF090B10),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF9B7BFF),
+        theme: ThemeData(
           brightness: Brightness.dark,
+          scaffoldBackgroundColor: const Color(0xFF090B10),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF9B7BFF),
+            brightness: Brightness.dark,
+          ),
+          useMaterial3: true,
         ),
-        useMaterial3: true,
-      ),
 
-      home: _home(),
+        home: _home(),
+      ),
     );
   }
 }

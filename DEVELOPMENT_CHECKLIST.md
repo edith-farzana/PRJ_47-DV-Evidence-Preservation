@@ -208,25 +208,36 @@ Replaces the hardcoded `2580`. This is where the app stops being a mockup.
 Makes "read-only" and "encrypted at rest" true locally.
 
 ### Implementation
-- [ ] `lib/services/storage/evidence_storage.dart` — route `addEvidence()` through `CryptoService`
-- [ ] Preserve the existing copy-then-store ordering (the current comment about not moving the source is correct)
-- [ ] **Securely delete the plaintext source** after a verified write
-- [ ] `lib/services/storage/evidence_index.dart` (new) — replace the `SharedPreferences` index with an AES-256-GCM encrypted `index.enc` in app documents
-- [ ] Running hash over the index so silent edits are detectable
-- [ ] Keep the append-only discipline: still no `deleteEvidence()` / `updateEvidence()`
+- [x] `lib/services/storage/evidence_storage.dart` — `addEvidence()` routes through `CryptoService`; blobs are `evidence/<uuid>.enc` with no extension
+- [x] Order: encrypt → **decrypt and re-hash to verify** → index → destroy source. The source is kept, and the partial blob removed, if any step before the last fails
+- [x] **Plaintext source overwritten with zeros, then deleted**, after the verified write (best effort on flash; SECURITY.md §5)
+- [x] `lib/services/storage/evidence_index.dart` (new) — AES-256-GCM `index.enc`, key derived from the master key with HKDF, atomic temp-and-rename writes, serialized appends
+- [x] **Rollback detection** in place of a "running hash": GCM already catches edits, so the seal (count + SHA-256 of `index.enc`, in Keystore-backed storage) catches an older genuine copy being put back. Crash-safe via a pending hash
+- [x] Keep the append-only discipline: still no `deleteEvidence()` / `updateEvidence()`
+- [x] `lib/app/app_scope.dart` (new) — `KeyManager` + `EvidenceStorage` shared through an InheritedWidget; the `EvidenceStorage.instance` singleton is gone
+- [x] Vault: error screen for an untrusted index (never "No evidence yet"); "STORED" → "ENCRYPTED" + hash prefix
 
-> **Note:** any evidence captured during earlier development becomes unreadable after this change. There is no production data, so no migration is needed — just clear app data when testing.
+> **Note:** evidence captured before P3 (plaintext files, SharedPreferences index) is not migrated or deleted. Clear app data on test devices.
 
-### Tests — `test/services/evidence_storage_test.dart`, `test/services/evidence_index_test.dart` (new)
-- [ ] Add evidence → the stored file is **not** byte-identical to the source (proves encryption actually ran, rather than assuming it did)
-- [ ] Stored blob contains no recognizable file-format magic header (no `JFIF`, no `ftyp`)
-- [ ] Index round-trips: write N items, reload, all fields intact
-- [ ] Newest-first ordering preserved (existing behaviour in `getEvidence()`)
-- [ ] **Corrupt `index.enc` → load fails loudly.** The current `getEvidence()` silently returns `[]` on malformed data; that must not survive into the encrypted index — silently showing an empty vault to someone whose evidence still exists is the worst possible failure mode here
-- [ ] Plaintext source file is gone after a successful add
-- [ ] `EvidenceStorage` still exposes no delete or update method
+### Tests — `test/services/evidence_storage_test.dart` (12), `test/services/evidence_index_test.dart` (11)
+- [x] Add evidence → the stored file is **not** byte-identical to the source
+- [x] Stored blob contains no JPEG (`FF D8 FF`, `JFIF`) or MP4 (`ftyp`) header
+- [x] Blob decrypts back to exactly the source; blob name reveals neither type nor original name
+- [x] Nothing in the evidence directory contains the original filename
+- [x] Index round-trips N items with every field; newest-first ordering survives a restart
+- [x] **Corrupt `index.enc` → load fails loudly**; wrong key, deleted index and missing seal likewise
+- [x] **Rolled-back `index.enc` → detected**
+- [x] Crash after rename and crash before rename both recover to a consistent state
+- [x] Concurrent appends are all kept
+- [x] Plaintext source is gone after a successful add, and **kept** when verification fails, the index write fails, or the vault is locked
+- [ ] ~~`EvidenceStorage` still exposes no delete or update method~~: not testable without reflection; enforced by review
 
-**Gate:** `flutter test` green · `adb pull` a stored blob and confirm it is unreadable · commit `P3: encrypted storage`
+**Gate:**
+- [x] `flutter analyze` clean
+- [x] `flutter test` green — 85/85
+- [x] `flutter build apk --debug` succeeds
+- [ ] **Manual on a real device:** capture photo + audio → vault shows ENCRYPTED → `adb shell run-as <applicationId> ls app_flutter/evidence` shows only `.enc` files → pull a blob and confirm it does not open
+- [x] Committed as `P3: encrypted storage`
 
 ---
 
@@ -398,7 +409,7 @@ Update this after every gate.
 | P0 Planning & docs | 4% | In progress | 5/6 tasks (teammate sign-off pending) |
 | P1 Crypto core | 14% | ✅ Gate passed | 23/23 tests green, analyzer clean |
 | P2 Key & PIN management | 11% | ✅ Built, device check pending | 62/62 tests green, APK builds; manual device pass outstanding |
-| P3 Storage hardening | 9% | Not started | — |
+| P3 Storage hardening | 9% | ✅ Built, device check pending | 85/85 tests green, APK builds; manual device pass outstanding |
 | P4 Safety fixes | 9% | Not started | — |
 | P5 Firebase + rules | 13% | Not started | — |
 | P6 Audit log | 10% | Not started | — |
@@ -407,7 +418,7 @@ Update this after every gate.
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~52%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%) + P2 (11%, pending the on-device check)
+**Current: ~61%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%) + P2 (11%) + P3 (9%); P2 and P3 pending their on-device checks
 **Review target: 65%**
 
 ---

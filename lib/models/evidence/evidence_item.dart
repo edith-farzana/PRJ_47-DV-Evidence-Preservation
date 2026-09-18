@@ -15,10 +15,9 @@ class EvidenceItem {
   // -----------------------------------------------------------------
   // Cryptographic metadata.
   //
-  // Nullable because storage does not route through CryptoService until
-  // P3. Once it does, an item with a null [plaintextSha256] is an
-  // unencrypted legacy record and should be treated as unverifiable --
-  // see [isEncrypted].
+  // Every item written by EvidenceStorage carries all of these. They are
+  // nullable only so that a malformed or pre-encryption record can still
+  // be parsed and shown as unprotected -- see [isEncrypted].
   // -----------------------------------------------------------------
 
   /// SHA-256 of the original captured file, hex encoded.

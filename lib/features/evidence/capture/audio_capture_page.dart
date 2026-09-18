@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../app/app_scope.dart';
 import '../../../models/evidence/evidence_item.dart';
-import '../../../services/storage/evidence_storage.dart';
 
 class AudioCapturePage extends StatefulWidget {
   const AudioCapturePage({super.key});
@@ -89,6 +89,8 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
   Future<void> _stopRecording() async {
     if (!_recording || _saving) return;
 
+    final storage = AppScope.of(context).storage;
+
     setState(() {
       _saving = true;
     });
@@ -108,7 +110,7 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         throw Exception('Recorded audio file does not exist.');
       }
 
-      final evidence = await EvidenceStorage.instance.addEvidence(
+      final evidence = await storage.addEvidence(
         sourceFile: file,
         type: EvidenceType.audio,
         originalFileName: 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',

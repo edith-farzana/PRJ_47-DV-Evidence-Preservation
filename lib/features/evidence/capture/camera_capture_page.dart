@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../app/app_scope.dart';
 import '../../../models/evidence/evidence_item.dart';
-import '../../../services/storage/evidence_storage.dart';
 
 class CameraCapturePage extends StatefulWidget {
   final bool videoMode;
@@ -22,6 +22,8 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
 
   Future<void> _capture() async {
     if (_busy) return;
+
+    final storage = AppScope.of(context).storage;
 
     setState(() {
       _busy = true;
@@ -54,7 +56,7 @@ class _CameraCapturePageState extends State<CameraCapturePage> {
 
       final type = widget.videoMode ? EvidenceType.video : EvidenceType.photo;
 
-      final evidence = await EvidenceStorage.instance.addEvidence(
+      final evidence = await storage.addEvidence(
         sourceFile: file,
         type: type,
         originalFileName: captured.name,

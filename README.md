@@ -18,13 +18,11 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 - ✅ Functional decoy calculator front-end with hidden unlock sequence
 - ✅ User-chosen PIN and unlock sequence; the PIN unlocks a Keystore-protected master key, with persistent lockout (unit tested)
 - ✅ Photo, video and audio capture
-- ✅ Local evidence store with append-only discipline
+- ✅ Encrypted local evidence store: AES-256-GCM per file, encrypted index with rollback detection, plaintext source destroyed after a verified write
 - ✅ Evidence vault listing with timestamps and metadata
 - ✅ Emergency helpline directory
 
 **In progress**
-- 🟡 Client-side encryption (AES-256-GCM, envelope key hierarchy): built and tested, but captured evidence is not routed through it until P3
-- 🟡 SHA-256 integrity hashing: built and tested, wired in with P3
 - 🔴 Firebase backend with server-enforced immutability
 - 🔴 Tamper-evident audit log
 
@@ -69,7 +67,7 @@ Digital evidence is only useful when its **authenticity, integrity, provenance, 
 
 Secure Evidence is designed to support these principles through:
 
-🔴 **Protected Evidence**  
+🟢 **Protected Evidence**  
 Sensitive content is secured through a layered encryption architecture.
 
 ✅ **Time & Metadata**  
