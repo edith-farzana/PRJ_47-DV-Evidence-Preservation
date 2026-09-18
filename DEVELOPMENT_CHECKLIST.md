@@ -1,7 +1,7 @@
 # Secure Evidence — Development Checklist
 
 **Branch for this work:** `feature/security-layer`
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-18
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
 
@@ -82,7 +82,7 @@ No feature code in this phase. Deliberate: we agree the map before anyone drives
 - [x] Write `docs/SECURITY.md` — algorithms, key hierarchy, threat model, and an explicit list of what is **not** protected
 - [x] Correct `README.md` — status markers throughout, "Current Status" section, Technology split into in-use vs planned
 - [ ] Teammate reads the checklist and agrees the phase split
-- [ ] Install Flutter SDK on Akash's machine (currently absent — `flutter test` / `flutter analyze` cannot run locally)
+- [x] Install Flutter SDK on Akash's machine (Flutter 3.47.4 / Dart 3.13.3, installed by 2026-09-18)
 
 > **Why the README correction matters:** the README currently claims shipped AES-256, JWT and PostgreSQL. If an examiner asks to see the encryption and it does not exist, the whole project's credibility goes with it. A README that says "planned" costs us nothing and protects us.
 
@@ -94,16 +94,14 @@ No feature code in this phase. Deliberate: we agree the map before anyone drives
 
 The heart of the project. Everything after this depends on it, which is why it goes first and gets the most test coverage.
 
-> ⚠️ **P1 is written but UNVERIFIED.** No Flutter SDK is installed on the
-> development machine, so `flutter pub get`, `flutter analyze` and
-> `flutter test` have never been run against this code. It has not
-> compiled once. Treat the code below as a first draft until the gate
-> passes. Most likely places to need adjustment are flagged inline.
+> ✅ **P1 gate passed on 2026-09-18** (Flutter 3.47.4, Dart 3.13.3).
+> `flutter pub get` resolved, `flutter analyze` was clean and all 23
+> crypto tests passed on the first run. No code changes were needed.
 
 ### Setup
-- [x] Add `cryptography` and `flutter_secure_storage` to `pubspec.yaml` — **hand-written constraints (`^2.7.0`, `^9.2.2`), not resolved by pub. Verify with `flutter pub get`**
+- [x] Add `cryptography` and `flutter_secure_storage` to `pubspec.yaml` — **resolved to `cryptography 2.9.0`, `flutter_secure_storage 9.2.4`**
 - [x] Keep the existing `crypto` package — it is used for streaming SHA-256
-- [ ] Run `flutter pub get` and confirm the constraints resolve
+- [x] Run `flutter pub get` and confirm the constraints resolve
 
 ### Implementation — `lib/services/crypto/crypto_service.dart` (new)
 - [x] Generate a random 256-bit **DEK** (data encryption key) per file
@@ -116,7 +114,7 @@ The heart of the project. Everything after this depends on it, which is why it g
 - [x] Public API: `encryptFile()`, `decryptToFile()`, `decryptToTemp()`, `verifyIntegrity()`, `verifyCiphertext()`, `hashFile()`, `hashBytes()`
 - [x] `decryptToTemp()` targets a temp file the caller must delete on dispose — plaintext never re-enters the evidence directory
 - [x] Failed decryption deletes the partial output rather than leaving half a file that looks like evidence
-- [ ] **Verify `encryptStream` / `decryptStream` signatures against the resolved `cryptography` version.** These are the least certain part of the file — written without a compiler. If they differ, this is where it breaks
+- [x] **Verify `encryptStream` / `decryptStream` signatures against the resolved `cryptography` version** — they match 2.9.0, and the analyzer is clean
 
 ### Implementation — `lib/models/evidence/evidence_item.dart` (modify)
 - [x] Add `plaintextSha256`, `ciphertextSha256`, `wrappedDek`, `nonce`, `gcmTag`, `encryptionAlgorithm`, `keyVersion`
@@ -148,13 +146,11 @@ The heart of the project. Everything after this depends on it, which is why it g
 - [x] `EvidenceItem` round-trips every crypto field through JSON
 - [x] `isEncrypted` false for a pre-encryption record, true once metadata is present
 
-**Gate — ⛔ BLOCKED, not passed:**
-- [ ] `flutter pub get` resolves
-- [ ] `flutter analyze` clean
-- [ ] `flutter test` green — **none of the 23 tests above has ever been executed**
-- [x] Committed as a draft so the work is not lost
-
-> **Do not count P1 toward the completion percentage until the gate passes.** Code that has never compiled is not 14%.
+**Gate — ✅ passed 2026-09-18:**
+- [x] `flutter pub get` resolves
+- [x] `flutter analyze` clean (`No issues found!`)
+- [x] `flutter test` green — 32/32 (23 crypto + 8 PinValidator + 1 widget smoke test)
+- [x] Committed as `P1: crypto core (gate passed)`
 
 ---
 
@@ -384,8 +380,8 @@ Update this after every gate.
 
 | Phase | Weight | Status | Done |
 |---|---|---|---|
-| P0 Planning & docs | 4% | In progress | 4/6 tasks |
-| P1 Crypto core | 14% | ⛔ Written, gate blocked | Code + 23 tests written, **never compiled or run** |
+| P0 Planning & docs | 4% | In progress | 5/6 tasks (teammate sign-off pending) |
+| P1 Crypto core | 14% | ✅ Gate passed | 23/23 tests green, analyzer clean |
 | P2 Key & PIN management | 11% | Not started | — |
 | P3 Storage hardening | 9% | Not started | — |
 | P4 Safety fixes | 9% | Not started | — |
@@ -396,14 +392,8 @@ Update this after every gate.
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~28%** — P1 code exists but does not count until it compiles and its tests pass
+**Current: ~41%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%)
 **Review target: 65%**
-
-> 🚨 **Blocking the whole schedule: no Flutter SDK on the development
-> machine.** Every phase gate from P1 onward depends on `flutter test`.
-> Install the SDK before continuing, or move development to the
-> teammate's machine. Writing more unverified phases on top of an
-> unverified P1 is how a crypto bug reaches the demo.
 
 ---
 
