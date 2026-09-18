@@ -3,9 +3,17 @@ import 'package:flutter/material.dart';
 import '../domain/calculator_engine.dart';
 
 class CalculatorPage extends StatefulWidget {
-  const CalculatorPage({super.key, required this.onPrivateAccess});
+  const CalculatorPage({
+    super.key,
+    required this.onPrivateAccess,
+    required this.unlockSequence,
+  });
 
   final VoidCallback onPrivateAccess;
+
+  /// The user's chosen key sequence, ending in `=` (set up in
+  /// SetupPage, stored by KeyManager).
+  final String unlockSequence;
 
   @override
   State<CalculatorPage> createState() => _CalculatorPageState();
@@ -15,12 +23,6 @@ class _CalculatorPageState extends State<CalculatorPage> {
   final CalculatorEngine _calculator = CalculatorEngine();
 
   String _privateSequence = '';
-
-  // Temporary development sequence.
-  //
-  // This is only for testing the private-access routing.
-  // We will replace this later with the final PIN/secret mechanism.
-  static const String _developmentSecret = '1+2+3+4=';
 
   void _handleDigit(String digit) {
     setState(() {
@@ -54,7 +56,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
       _privateSequence += '=';
       _trimPrivateSequence();
 
-      if (_privateSequence == _developmentSecret) {
+      if (_privateSequence == widget.unlockSequence) {
         _privateSequence = '';
         widget.onPrivateAccess();
         return;

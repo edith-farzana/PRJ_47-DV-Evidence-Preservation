@@ -1,7 +1,7 @@
 # Secure Evidence — Development Checklist
 
 **Branch for this work:** `feature/security-layer`
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-18
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
 
@@ -82,7 +82,7 @@ No feature code in this phase. Deliberate: we agree the map before anyone drives
 - [x] Write `docs/SECURITY.md` — algorithms, key hierarchy, threat model, and an explicit list of what is **not** protected
 - [x] Correct `README.md` — status markers throughout, "Current Status" section, Technology split into in-use vs planned
 - [ ] Teammate reads the checklist and agrees the phase split
-- [ ] Install Flutter SDK on Akash's machine (currently absent — `flutter test` / `flutter analyze` cannot run locally)
+- [x] Install Flutter SDK on Akash's machine (Flutter 3.47.4 / Dart 3.13.3, installed by 2026-09-18)
 
 > **Why the README correction matters:** the README currently claims shipped AES-256, JWT and PostgreSQL. If an examiner asks to see the encryption and it does not exist, the whole project's credibility goes with it. A README that says "planned" costs us nothing and protects us.
 
@@ -94,16 +94,14 @@ No feature code in this phase. Deliberate: we agree the map before anyone drives
 
 The heart of the project. Everything after this depends on it, which is why it goes first and gets the most test coverage.
 
-> ⚠️ **P1 is written but UNVERIFIED.** No Flutter SDK is installed on the
-> development machine, so `flutter pub get`, `flutter analyze` and
-> `flutter test` have never been run against this code. It has not
-> compiled once. Treat the code below as a first draft until the gate
-> passes. Most likely places to need adjustment are flagged inline.
+> ✅ **P1 gate passed on 2026-09-18** (Flutter 3.47.4, Dart 3.13.3).
+> `flutter pub get` resolved, `flutter analyze` was clean and all 23
+> crypto tests passed on the first run. No code changes were needed.
 
 ### Setup
-- [x] Add `cryptography` and `flutter_secure_storage` to `pubspec.yaml` — **hand-written constraints (`^2.7.0`, `^9.2.2`), not resolved by pub. Verify with `flutter pub get`**
+- [x] Add `cryptography` and `flutter_secure_storage` to `pubspec.yaml` — **resolved to `cryptography 2.9.0`, `flutter_secure_storage 9.2.4`**
 - [x] Keep the existing `crypto` package — it is used for streaming SHA-256
-- [ ] Run `flutter pub get` and confirm the constraints resolve
+- [x] Run `flutter pub get` and confirm the constraints resolve
 
 ### Implementation — `lib/services/crypto/crypto_service.dart` (new)
 - [x] Generate a random 256-bit **DEK** (data encryption key) per file
@@ -116,7 +114,7 @@ The heart of the project. Everything after this depends on it, which is why it g
 - [x] Public API: `encryptFile()`, `decryptToFile()`, `decryptToTemp()`, `verifyIntegrity()`, `verifyCiphertext()`, `hashFile()`, `hashBytes()`
 - [x] `decryptToTemp()` targets a temp file the caller must delete on dispose — plaintext never re-enters the evidence directory
 - [x] Failed decryption deletes the partial output rather than leaving half a file that looks like evidence
-- [ ] **Verify `encryptStream` / `decryptStream` signatures against the resolved `cryptography` version.** These are the least certain part of the file — written without a compiler. If they differ, this is where it breaks
+- [x] **Verify `encryptStream` / `decryptStream` signatures against the resolved `cryptography` version** — they match 2.9.0, and the analyzer is clean
 
 ### Implementation — `lib/models/evidence/evidence_item.dart` (modify)
 - [x] Add `plaintextSha256`, `ciphertextSha256`, `wrappedDek`, `nonce`, `gcmTag`, `encryptionAlgorithm`, `keyVersion`
@@ -148,13 +146,11 @@ The heart of the project. Everything after this depends on it, which is why it g
 - [x] `EvidenceItem` round-trips every crypto field through JSON
 - [x] `isEncrypted` false for a pre-encryption record, true once metadata is present
 
-**Gate — ⛔ BLOCKED, not passed:**
-- [ ] `flutter pub get` resolves
-- [ ] `flutter analyze` clean
-- [ ] `flutter test` green — **none of the 23 tests above has ever been executed**
-- [x] Committed as a draft so the work is not lost
-
-> **Do not count P1 toward the completion percentage until the gate passes.** Code that has never compiled is not 14%.
+**Gate — ✅ passed 2026-09-18:**
+- [x] `flutter pub get` resolves
+- [x] `flutter analyze` clean (`No issues found!`)
+- [x] `flutter test` green — 32/32 (23 crypto + 8 PinValidator + 1 widget smoke test)
+- [x] Committed as `P1: crypto core (gate passed)`
 
 ---
 
@@ -162,33 +158,48 @@ The heart of the project. Everything after this depends on it, which is why it g
 
 Replaces the hardcoded `2580`. This is where the app stops being a mockup.
 
+> **Decision (2026-09-18):** keep the 4-digit PIN, and bind the PIN-wrapped
+> master key to the Android Keystore (option 1) rather than moving to longer
+> PINs. 10,000 PINs are only guessable on the device itself, where the lockout
+> applies. Rationale and the root-on-device limit are in `docs/SECURITY.md` §2.2.
+
 ### Implementation — `lib/services/crypto/key_manager.dart` (new)
-- [ ] **Master key (KEK):** random 256 bits, generated once at first run
-- [ ] **PIN-derived key:** PBKDF2-HMAC-SHA256 at **≥150,000 iterations** (or Argon2id) over PIN + random 128-bit salt
-- [ ] Master key is **wrapped by the PIN-derived key**, stored in `flutter_secure_storage` (Android Keystore-backed)
-- [ ] The PIN itself is **never stored** — a wrong PIN simply fails to unwrap the master key
-- [ ] Master key lives in memory only while unlocked; zeroed on lock and on panic
+- [x] **Master key (KEK):** random 256 bits, generated once at first run
+- [x] **PIN-derived key:** PBKDF2-HMAC-SHA256 at **150,000 iterations** over PIN + random 128-bit salt, run in a background isolate
+- [x] Master key is **wrapped by the PIN-derived key**, stored in `flutter_secure_storage`, whose values are encrypted under a non-exportable Keystore key (`lib/services/crypto/secure_store.dart`)
+- [x] Salt, iteration count and wrapped key written as **one** record, so a crash can't leave them mismatched
+- [x] The PIN itself is **never stored** — a wrong PIN simply fails to unwrap the master key
+- [x] Master key lives in memory only while unlocked; `lock()` overwrites its bytes. *(Locking on panic is P4.)*
+- [x] Android backups and device-to-device transfer disabled (`AndroidManifest.xml`, `res/xml/data_extraction_rules.xml`)
 
 ### Implementation — auth flow
-- [ ] `lib/features/auth/domain/pin_validator.dart` — delete `secretPin = '2580'` and `matchesSecret()`. Keep format validation (its 8 tests must still pass). Verification moves to `KeyManager.unlock(pin)`
-- [ ] `lib/features/auth/presentation/pin_page.dart` — first-run "set your PIN" flow (enter + confirm), then normal unlock
-- [ ] Failed-attempt lockout with exponential backoff; counter persisted so a restart does not reset it
-- [ ] `lib/features/calculator/presentation/calculator_page.dart` — `_developmentSecret = '1+2+3+4='` becomes user-configurable, stored in secure storage
-- [ ] `lib/features/home/home_page.dart` — wire the dead "Change PIN" tile: re-wrap the master key under a new PIN, **without** re-encrypting any evidence
-- [ ] Document in `docs/SECURITY.md`: keys never leave the device, so a forgotten PIN means permanently unrecoverable evidence. Recovery key is P7
+- [x] `lib/features/auth/domain/pin_validator.dart` — `secretPin = '2580'` and `matchesSecret()` deleted. Format validation kept; its 8 tests still pass
+- [x] `lib/features/auth/presentation/setup_page.dart` (new) — first-run PIN + confirm + unlock sequence, with a forgotten-PIN warning
+- [x] `lib/features/auth/presentation/pin_page.dart` — unlocks via `KeyManager.unlock()`, spinner during the KDF, live lockout countdown
+- [x] Failed-attempt lockout: 4 free, then 30s → 1m → 2m → 5m → 15m → 1h; persisted, survives restart; attempt counted before the KDF runs. **No wipe after N failures**, on purpose
+- [x] `lib/features/calculator/presentation/calculator_page.dart` — `_developmentSecret` removed; the sequence is user-chosen (`lib/features/auth/domain/unlock_sequence.dart`) and stored in secure storage
+- [x] `lib/features/home/home_page.dart` + `change_pin_page.dart` (new) — "Change PIN" re-wraps the master key under a new PIN and salt, **without** re-encrypting any evidence; wrong current PIN counts toward the lockout
+- [x] Documented in `docs/SECURITY.md`: Keystore layer and its limit (§2.2), lockout (§4.2), clock and isolate-copy limits (§5)
 
-> **Worth being able to explain live:** changing the PIN re-wraps one 256-bit key, not 4GB of video. That is the entire reason for envelope encryption, and it is the kind of thing examiners probe.
+### Tests — `test/services/key_manager_test.dart` (new, 19 cases) + widget and sequence tests
+- [x] Correct PIN unwraps the master key, and that key decrypts a file made by `CryptoService`
+- [x] Wrong PIN fails to unwrap
+- [x] **PIN change:** files encrypted under the old PIN still decrypt afterwards; old PIN stops working
+- [x] Same PIN + different salt → different stored key
+- [x] The PIN appears nowhere in storage
+- [x] Lockout backoff increases with each failure, caps at 1h, and survives a simulated restart; a correct PIN during lockout is refused
+- [x] KDF iteration count is at least 150,000 (guard test; ~0.7s on the dev machine)
+- [x] Corrupted key record fails loudly rather than resetting
+- [x] The existing 8 `PinValidator` tests still pass
+- [x] Widget: first launch shows setup; the chosen sequence opens the PIN screen; `1+2+3+4=` no longer does
+- [x] `UnlockSequence`: normalization and validation (8 cases)
 
-### Tests — `test/services/key_manager_test.dart` (new)
-- [ ] Correct PIN unwraps the master key
-- [ ] Wrong PIN fails to unwrap
-- [ ] **PIN change:** files encrypted under the old PIN still decrypt afterwards
-- [ ] Same PIN + different salt → different derived key
-- [ ] Lockout backoff increases with each failure and survives a simulated restart
-- [ ] KDF iteration count is at least the configured minimum (guards against someone lowering it for test speed and forgetting)
-- [ ] The existing 8 `PinValidator` tests still pass
-
-**Gate:** `flutter test` green · manual first-run, unlock and change-PIN on device · commit `P2: key and PIN management`
+**Gate:**
+- [x] `flutter analyze` clean
+- [x] `flutter test` green — 62/62
+- [x] `flutter build apk --debug` succeeds
+- [ ] **Manual on a real device:** first-run setup, custom sequence, wrong PIN ×5 → countdown, kill app → still locked out, Change PIN → relaunch → new PIN works. **Time the unlock**: if 150k iterations takes more than ~3s, raise it rather than quietly lowering the count
+- [x] Committed as `P2: key and PIN management`
 
 ---
 
@@ -197,25 +208,36 @@ Replaces the hardcoded `2580`. This is where the app stops being a mockup.
 Makes "read-only" and "encrypted at rest" true locally.
 
 ### Implementation
-- [ ] `lib/services/storage/evidence_storage.dart` — route `addEvidence()` through `CryptoService`
-- [ ] Preserve the existing copy-then-store ordering (the current comment about not moving the source is correct)
-- [ ] **Securely delete the plaintext source** after a verified write
-- [ ] `lib/services/storage/evidence_index.dart` (new) — replace the `SharedPreferences` index with an AES-256-GCM encrypted `index.enc` in app documents
-- [ ] Running hash over the index so silent edits are detectable
-- [ ] Keep the append-only discipline: still no `deleteEvidence()` / `updateEvidence()`
+- [x] `lib/services/storage/evidence_storage.dart` — `addEvidence()` routes through `CryptoService`; blobs are `evidence/<uuid>.enc` with no extension
+- [x] Order: encrypt → **decrypt and re-hash to verify** → index → destroy source. The source is kept, and the partial blob removed, if any step before the last fails
+- [x] **Plaintext source overwritten with zeros, then deleted**, after the verified write (best effort on flash; SECURITY.md §5)
+- [x] `lib/services/storage/evidence_index.dart` (new) — AES-256-GCM `index.enc`, key derived from the master key with HKDF, atomic temp-and-rename writes, serialized appends
+- [x] **Rollback detection** in place of a "running hash": GCM already catches edits, so the seal (count + SHA-256 of `index.enc`, in Keystore-backed storage) catches an older genuine copy being put back. Crash-safe via a pending hash
+- [x] Keep the append-only discipline: still no `deleteEvidence()` / `updateEvidence()`
+- [x] `lib/app/app_scope.dart` (new) — `KeyManager` + `EvidenceStorage` shared through an InheritedWidget; the `EvidenceStorage.instance` singleton is gone
+- [x] Vault: error screen for an untrusted index (never "No evidence yet"); "STORED" → "ENCRYPTED" + hash prefix
 
-> **Note:** any evidence captured during earlier development becomes unreadable after this change. There is no production data, so no migration is needed — just clear app data when testing.
+> **Note:** evidence captured before P3 (plaintext files, SharedPreferences index) is not migrated or deleted. Clear app data on test devices.
 
-### Tests — `test/services/evidence_storage_test.dart`, `test/services/evidence_index_test.dart` (new)
-- [ ] Add evidence → the stored file is **not** byte-identical to the source (proves encryption actually ran, rather than assuming it did)
-- [ ] Stored blob contains no recognizable file-format magic header (no `JFIF`, no `ftyp`)
-- [ ] Index round-trips: write N items, reload, all fields intact
-- [ ] Newest-first ordering preserved (existing behaviour in `getEvidence()`)
-- [ ] **Corrupt `index.enc` → load fails loudly.** The current `getEvidence()` silently returns `[]` on malformed data; that must not survive into the encrypted index — silently showing an empty vault to someone whose evidence still exists is the worst possible failure mode here
-- [ ] Plaintext source file is gone after a successful add
-- [ ] `EvidenceStorage` still exposes no delete or update method
+### Tests — `test/services/evidence_storage_test.dart` (12), `test/services/evidence_index_test.dart` (11)
+- [x] Add evidence → the stored file is **not** byte-identical to the source
+- [x] Stored blob contains no JPEG (`FF D8 FF`, `JFIF`) or MP4 (`ftyp`) header
+- [x] Blob decrypts back to exactly the source; blob name reveals neither type nor original name
+- [x] Nothing in the evidence directory contains the original filename
+- [x] Index round-trips N items with every field; newest-first ordering survives a restart
+- [x] **Corrupt `index.enc` → load fails loudly**; wrong key, deleted index and missing seal likewise
+- [x] **Rolled-back `index.enc` → detected**
+- [x] Crash after rename and crash before rename both recover to a consistent state
+- [x] Concurrent appends are all kept
+- [x] Plaintext source is gone after a successful add, and **kept** when verification fails, the index write fails, or the vault is locked
+- [ ] ~~`EvidenceStorage` still exposes no delete or update method~~: not testable without reflection; enforced by review
 
-**Gate:** `flutter test` green · `adb pull` a stored blob and confirm it is unreadable · commit `P3: encrypted storage`
+**Gate:**
+- [x] `flutter analyze` clean
+- [x] `flutter test` green — 85/85
+- [x] `flutter build apk --debug` succeeds
+- [ ] **Manual on a real device:** capture photo + audio → vault shows ENCRYPTED → `adb shell run-as <applicationId> ls app_flutter/evidence` shows only `.enc` files → pull a blob and confirm it does not open
+- [x] Committed as `P3: encrypted storage`
 
 ---
 
@@ -268,28 +290,63 @@ Where "secure read-only database" stops being a claim and becomes something we c
 
 > **Why anonymous:** an email or SMS confirmation lands in an inbox the abuser may have access to. Anonymous auth leaves no trace tying the account to the survivor. This is a deliberate threat-model decision, not laziness — say so in the review.
 
-### Data model
-- [ ] Firestore `/users/{uid}/evidence/{evidenceId}` — metadata only (hashes, nonce, wrapped DEK, timestamps, size, type)
-- [ ] Storage `/users/{uid}/evidence/{evidenceId}.enc` — encrypted blob only
-- [ ] `lib/services/sync/firebase_evidence_repository.dart` (new) — **upload blob first, then write metadata**, so a metadata record never points at a missing file
+### Data model — hybrid, media stays local by default
+
+> **Decision (2026-09-16):** media is **not** uploaded by default. Only the
+> metadata and the wrapped key go to the cloud. Uploading the encrypted
+> blob is a **per-item opt-in** the survivor controls.
+>
+> The stated reason was privacy — not wanting to hold survivor media.
+> Note for the record that client-side encryption already solved that:
+> Firebase only ever receives ciphertext we cannot decrypt (adversary
+> A6 in `docs/SECURITY.md`). The real justification for opt-in is
+> **survivor control over what leaves their device**, which is worth
+> having in a DV app regardless of what the crypto guarantees.
+
+**Always uploaded — Firestore `/users/{uid}/evidence/{evidenceId}`**
+- [ ] Metadata only: `plaintextSha256`, `ciphertextSha256`, `wrappedDek`, `nonce`, `gcmTag`, `capturedAt`, `fileSizeBytes`, `type`, `encryptionAlgorithm`, `keyVersion`
+- [ ] No filename, no location, no free text — nothing that identifies a person
+
+**Opt-in only — Storage `/users/{uid}/evidence/{evidenceId}.enc`**
+- [ ] Uploaded **only** when the user explicitly enables backup for that item
+- [ ] Per-item "Back up this evidence" toggle in the vault (`lib/features/vault/evidence_vault_page.dart`)
+- [ ] Clear copy explaining the trade-off: backed up survives losing the phone; local-only never leaves the device
+
+**Backup receipts — Firestore `/users/{uid}/backups/{evidenceId}`**
+- [ ] A create-only receipt written when a blob upload completes
+
+> **Why a separate collection instead of a flag on the evidence doc:**
+> flipping a `hasBackup` field would be an **update**, and the whole
+> point of this phase is that `allow update: if false`. A create-only
+> receipt in its own collection keeps the evidence record genuinely
+> immutable while still recording that a backup exists — and it is what
+> lets a reinstalled app discover which items have cloud copies.
+
+**Local sync state**
+- [ ] Add `backupState` (`localOnly` / `uploading` / `backedUp` / `failed`) to the **local encrypted index only**, never to Firestore
+- [ ] `lib/services/sync/firebase_evidence_repository.dart` (new) — metadata write first, then blob upload if opted in, then the receipt
 
 ### Security rules — `firestore.rules`, `storage.rules` (new)
-- [ ] Firestore: `allow create` and `allow read` for own uid only; **`allow update, delete: if false`**
+- [ ] Firestore evidence: `allow create` + `allow read` for own uid; **`allow update, delete: if false`**
+- [ ] Firestore backups: same create-only rule
 - [ ] Storage: `allow create: if resource == null` (no overwrite); **`allow delete: if false`**
 
 ### Tests
-- [ ] **Rules tests** (`test/rules/evidence_rules.test.js`, Firebase emulator + `@firebase/rules-unit-testing`) — this is the headline deliverable of the phase:
+- [ ] **Rules tests** (`test/rules/evidence_rules.test.js`, Firebase emulator + `@firebase/rules-unit-testing`) — the headline deliverable of the phase:
   - [ ] Create succeeds for own uid
   - [ ] Create denied for another user's uid
   - [ ] **Update denied**
   - [ ] **Delete denied**
   - [ ] Read denied when unauthenticated
+  - [ ] Backup receipt create succeeds, update and delete denied
   - [ ] Storage overwrite denied
-- [ ] Dart: repository uploads blob before metadata
-- [ ] Dart: a failed blob upload writes no metadata record
+- [ ] Dart: metadata uploads for **every** item, including local-only ones
+- [ ] Dart: **no blob is uploaded unless backup is explicitly enabled** — the load-bearing test for this decision
+- [ ] Dart: enabling backup uploads the blob and writes a receipt
+- [ ] Dart: a failed blob upload writes no receipt, and `backupState` becomes `failed`
 - [ ] Dart: the uploaded payload contains no plaintext (assert on bytes handed to the mock)
 
-**Gate:** rules tests green against the emulator · `flutter test` green · one real capture visible in the Firebase console · **delete attempt denied in the rules playground** · commit `P5: firebase backend and immutable rules`
+**Gate:** rules tests green against the emulator · `flutter test` green · one capture visible in Firestore with **no blob in Storage** · then enable backup on it and see the blob and receipt appear · **delete attempt denied in the rules playground** · commit `P5: firebase backend and immutable rules`
 
 ---
 
@@ -349,10 +406,10 @@ Update this after every gate.
 
 | Phase | Weight | Status | Done |
 |---|---|---|---|
-| P0 Planning & docs | 4% | In progress | 4/6 tasks |
-| P1 Crypto core | 14% | ⛔ Written, gate blocked | Code + 23 tests written, **never compiled or run** |
-| P2 Key & PIN management | 11% | Not started | — |
-| P3 Storage hardening | 9% | Not started | — |
+| P0 Planning & docs | 4% | In progress | 5/6 tasks (teammate sign-off pending) |
+| P1 Crypto core | 14% | ✅ Gate passed | 23/23 tests green, analyzer clean |
+| P2 Key & PIN management | 11% | ✅ Built, device check pending | 62/62 tests green, APK builds; manual device pass outstanding |
+| P3 Storage hardening | 9% | ✅ Built, device check pending | 85/85 tests green, APK builds; manual device pass outstanding |
 | P4 Safety fixes | 9% | Not started | — |
 | P5 Firebase + rules | 13% | Not started | — |
 | P6 Audit log | 10% | Not started | — |
@@ -361,14 +418,8 @@ Update this after every gate.
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~28%** — P1 code exists but does not count until it compiles and its tests pass
+**Current: ~61%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%) + P2 (11%) + P3 (9%); P2 and P3 pending their on-device checks
 **Review target: 65%**
-
-> 🚨 **Blocking the whole schedule: no Flutter SDK on the development
-> machine.** Every phase gate from P1 onward depends on `flutter test`.
-> Install the SDK before continuing, or move development to the
-> teammate's machine. Writing more unverified phases on top of an
-> unverified P1 is how a crypto bug reaches the demo.
 
 ---
 

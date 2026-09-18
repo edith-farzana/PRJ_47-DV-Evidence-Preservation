@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../app/app_scope.dart';
 import '../../models/evidence/evidence_item.dart';
-import '../../services/storage/evidence_storage.dart';
+import '../../services/storage/evidence_index.dart';
 
 class EvidenceVaultPage extends StatefulWidget {
   const EvidenceVaultPage({super.key});
@@ -13,14 +14,20 @@ class EvidenceVaultPage extends StatefulWidget {
 class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
   late Future<List<EvidenceItem>> _evidenceFuture;
 
+  bool _loaded = false;
+
   @override
-  void initState() {
-    super.initState();
-    _reload();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!_loaded) {
+      _loaded = true;
+      _reload();
+    }
   }
 
   void _reload() {
-    _evidenceFuture = EvidenceStorage.instance.getEvidence();
+    _evidenceFuture = AppScope.of(context).storage.getEvidence();
   }
 
   Future<void> _refresh() async {
@@ -74,14 +81,45 @@ class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
           }
 
           if (snapshot.hasError) {
+            // Never fall through to "No evidence yet": the evidence may
+            // well still be on disk, and saying otherwise would be the
+            // most damaging thing this screen could do.
+            final tampered = snapshot.error is EvidenceIndexCorruptedException;
+
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load evidence.\n\n'
-                  '${snapshot.error}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      tampered ? Icons.gpp_bad_outlined : Icons.error_outline,
+                      color: Colors.redAccent,
+                      size: 56,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      tampered
+                          ? 'The evidence list could not be verified'
+                          : 'Could not load evidence',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      tampered
+                          ? 'It may have been altered or replaced. Your '
+                                'encrypted evidence files have not been '
+                                'deleted. Do not clear this app\'s data.'
+                          : '${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF9297A3)),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -223,22 +261,55 @@ class _EvidenceCard extends StatelessWidget {
 
           const SizedBox(width: 8),
 
-          const Column(
-            children: [
-              Icon(Icons.lock_outline, color: Color(0xFF67E8B1), size: 20),
-              SizedBox(height: 4),
-              Text(
-                'STORED',
-                style: TextStyle(
-                  color: Color(0xFF67E8B1),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
+          _ProtectionBadge(item: item),
         ],
       ),
+    );
+  }
+}
+
+/// ENCRYPTED plus the start of the evidentiary hash, or a warning for a
+/// record without crypto metadata. Integrity *verification* (re-hashing
+/// on demand) is P7; this reports what the record carries.
+class _ProtectionBadge extends StatelessWidget {
+  const _ProtectionBadge({required this.item});
+
+  final EvidenceItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final encrypted = item.isEncrypted;
+    final color = encrypted ? const Color(0xFF67E8B1) : Colors.orangeAccent;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Icon(
+          encrypted ? Icons.lock_outline : Icons.lock_open_outlined,
+          color: color,
+          size: 20,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          encrypted ? 'ENCRYPTED' : 'UNPROTECTED',
+          style: TextStyle(
+            color: color,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (encrypted) ...[
+          const SizedBox(height: 2),
+          Text(
+            item.shortHash.substring(0, 8),
+            style: const TextStyle(
+              color: Color(0xFF9297A3),
+              fontSize: 9,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

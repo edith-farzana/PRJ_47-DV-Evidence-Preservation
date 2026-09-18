@@ -16,16 +16,13 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 
 **Working today**
 - ✅ Functional decoy calculator front-end with hidden unlock sequence
-- ✅ PIN gate with format validation (unit tested)
+- ✅ User-chosen PIN and unlock sequence; the PIN unlocks a Keystore-protected master key, with persistent lockout (unit tested)
 - ✅ Photo, video and audio capture
-- ✅ Local evidence store with append-only discipline
+- ✅ Encrypted local evidence store: AES-256-GCM per file, encrypted index with rollback detection, plaintext source destroyed after a verified write
 - ✅ Evidence vault listing with timestamps and metadata
 - ✅ Emergency helpline directory
 
 **In progress**
-- 🔴 Client-side encryption (AES-256-GCM, envelope key hierarchy)
-- 🔴 SHA-256 integrity hashing
-- 🔴 Real key and PIN management (Android Keystore)
 - 🔴 Firebase backend with server-enforced immutability
 - 🔴 Tamper-evident audit log
 
@@ -70,7 +67,7 @@ Digital evidence is only useful when its **authenticity, integrity, provenance, 
 
 Secure Evidence is designed to support these principles through:
 
-🔴 **Protected Evidence**  
+🟢 **Protected Evidence**  
 Sensitive content is secured through a layered encryption architecture.
 
 ✅ **Time & Metadata**  
@@ -140,6 +137,10 @@ Security through obscurity protects nobody. The full cryptographic design, key h
 `Hash-chained audit log` · `Server-enforced immutability` · `Client-side encryption`
 
 > **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them. Rationale is in [`docs/SECURITY.md`](docs/SECURITY.md).
+
+> **Note on what leaves your device:** evidence **stays on your phone by default**. Only its cryptographic fingerprint and its encrypted key are recorded in the cloud — enough to prove the evidence existed and has not been altered, and not enough for anyone to view it. Uploading a copy of the file itself is a per-item choice you make. See [`docs/SECURITY.md` §3.3](docs/SECURITY.md).
+>
+> The trade-off is stated plainly in the app: an item kept only on your phone is **provably unaltered**, but does not survive losing the phone. An item you back up survives both.
 
 ---
 
