@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../models/evidence/backup_state.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../models/evidence/integrity_report.dart';
 import '../../../services/storage/evidence_storage.dart';
+import '../../../services/sync/evidence_sync.dart';
+import '../../../services/sync/evidence_sync_client.dart';
 import 'integrity_page.dart';
 
 /// Shows one piece of evidence: the media itself, what was recorded
@@ -235,7 +238,7 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
 
           const SizedBox(height: 16),
 
-          const _CloudNotice(),
+          _BackupCard(item: item),
         ],
       ),
     );
@@ -501,38 +504,156 @@ class _MediaPlayerState extends State<_MediaPlayer> {
   }
 }
 
-/// States plainly that cloud backup is not wired up yet, rather than
-/// offering a control that would do nothing.
-class _CloudNotice extends StatelessWidget {
-  const _CloudNotice();
+/// The per-item backup control.
+///
+/// The copy here is load-bearing. A survivor cannot make a real choice
+/// about what leaves their phone unless they are told what each option
+/// actually gives them -- including the part that is not finished yet:
+/// a cloud copy can be reopened on *this* phone, and restoring it to a
+/// new one needs the recovery key that arrives in P7.
+class _BackupCard extends StatefulWidget {
+  const _BackupCard({required this.item});
+
+  final EvidenceItem item;
+
+  @override
+  State<_BackupCard> createState() => _BackupCardState();
+}
+
+class _BackupCardState extends State<_BackupCard> {
+  bool _busy = false;
+
+  Future<void> _backUp(EvidenceSync sync) async {
+    setState(() => _busy = true);
+
+    try {
+      await sync.backUp(widget.item);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Encrypted copy backed up')));
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_message(error))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _message(Object error) {
+    if (error is SyncUnavailableException) {
+      return 'Cloud backup is not set up yet. Nothing has left this phone.';
+    }
+
+    if (error is SyncFailedException) {
+      return 'Backup did not finish: ${error.message}';
+    }
+
+    return 'Backup did not finish: $error';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF11151D),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF242934)),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.cloud_off_outlined, color: Color(0xFF9297A3), size: 20),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'This evidence is on this phone only. Cloud backup is not '
-              'connected yet, so nothing has left the device.',
-              style: TextStyle(
-                color: Color(0xFF9297A3),
-                fontSize: 12,
-                height: 1.45,
-              ),
-            ),
+    final sync = AppScope.of(context).sync;
+
+    return AnimatedBuilder(
+      animation: sync,
+      builder: (context, _) {
+        final state = sync.stateOf(widget.item.id);
+        final backedUp = state == BackupState.backedUp;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF11151D),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF242934)),
           ),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    backedUp
+                        ? Icons.cloud_done_outlined
+                        : Icons.cloud_off_outlined,
+                    color: backedUp
+                        ? const Color(0xFF67E8B1)
+                        : const Color(0xFF9297A3),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      backedUp ? 'Backed up' : 'On this phone only',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              Text(
+                backedUp
+                    ? 'An encrypted copy is stored in the cloud, and the '
+                          'record of it cannot be changed or deleted by '
+                          'anyone — including you. It can be opened again on '
+                          'this phone. Restoring it to a different phone '
+                          'needs a recovery key, which is not built yet.'
+                    : 'This evidence exists only here. A record of its '
+                          'fingerprint is still sent, so it can always be '
+                          'proved this file existed and was not altered — but '
+                          'the file itself is lost if this phone is.',
+                style: const TextStyle(
+                  color: Color(0xFF9297A3),
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+
+              if (!backedUp) ...[
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _busy ? null : () => _backUp(sync),
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.backup_outlined, size: 18),
+                    label: Text(
+                      _busy
+                          ? 'Backing up…'
+                          : state == BackupState.failed
+                          ? 'Try backup again'
+                          : 'Back up this evidence',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF9B7BFF),
+                      side: const BorderSide(color: Color(0xFF9B7BFF)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: const StadiumBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

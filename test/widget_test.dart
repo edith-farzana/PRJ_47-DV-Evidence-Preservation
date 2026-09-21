@@ -12,6 +12,7 @@ import 'package:secure_evidence_app/services/crypto/key_manager.dart';
 import 'package:secure_evidence_app/services/storage/evidence_storage.dart';
 
 import 'helpers/fake_secure_store.dart';
+import 'helpers/offline_sync.dart';
 
 /// The app under test. Nothing here touches storage, so the directory
 /// is never created.
@@ -27,6 +28,7 @@ SecureEvidenceApp buildApp({String? unlockSequence}) {
       store: store,
     ),
     lockController: AppLockController(keyManager: keyManager, store: store),
+    sync: offlineSync(),
     unlockSequence: unlockSequence,
   );
 }

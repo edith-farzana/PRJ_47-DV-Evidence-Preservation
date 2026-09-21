@@ -12,6 +12,7 @@ import 'package:secure_evidence_app/services/crypto/key_manager.dart';
 import 'package:secure_evidence_app/services/storage/evidence_storage.dart';
 
 import '../helpers/fake_secure_store.dart';
+import '../helpers/offline_sync.dart';
 
 const sequence = '7×3-1=';
 
@@ -53,6 +54,7 @@ void main() {
           store: store,
         ),
         lockController: controller,
+        sync: offlineSync(),
         unlockSequence: sequence,
       ),
     );

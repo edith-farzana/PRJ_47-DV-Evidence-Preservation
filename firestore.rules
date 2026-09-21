@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// Evidence records are immutable once created. This is enforced here,
+// on the server, and not in the app: a client cannot opt out of it.
+//
+// It means that once a record reaches Firestore, neither an abuser who
+// seizes the phone, nor the survivor under coercion, nor a developer
+// with console access, nor anyone holding the account can alter or
+// remove it. That is the strongest property this system has.
+//
+// Anything not matched below is denied: Firestore's default is deny.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Hashes, the wrapped key, a timestamp and a size. Written for
+    // every capture, whether or not its media is backed up, because
+    // this is what makes a later deletion provable.
+    match /users/{uid}/evidence/{evidenceId} {
+      allow create: if isOwner(uid);
+      allow read:   if isOwner(uid);
+      allow update, delete: if false;   // nobody, ever -- including the owner
+    }
+
+    // Proof that a cloud copy of the blob exists.
+    //
+    // A separate collection rather than a flag on the evidence
+    // document: setting a field would be an update, and update is
+    // denied above. A create-only receipt records the same fact while
+    // leaving the evidence record genuinely immutable.
+    match /users/{uid}/backups/{evidenceId} {
+      allow create: if isOwner(uid);
+      allow read:   if isOwner(uid);
+      allow update, delete: if false;
+    }
+  }
+}

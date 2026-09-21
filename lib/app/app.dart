@@ -7,6 +7,7 @@ import '../features/calculator/presentation/calculator_page.dart';
 import '../features/home/home_page.dart';
 import '../services/crypto/key_manager.dart';
 import '../services/storage/evidence_storage.dart';
+import '../services/sync/evidence_sync.dart';
 import 'app_lock_controller.dart';
 import 'app_scope.dart';
 
@@ -16,12 +17,14 @@ class SecureEvidenceApp extends StatefulWidget {
     required this.keyManager,
     required this.storage,
     required this.lockController,
+    required this.sync,
     required this.unlockSequence,
   });
 
   final KeyManager keyManager;
   final EvidenceStorage storage;
   final AppLockController lockController;
+  final EvidenceSync sync;
 
   /// Null until first-run setup has been completed.
   final String? unlockSequence;
@@ -114,6 +117,7 @@ class _SecureEvidenceAppState extends State<SecureEvidenceApp> {
       keyManager: widget.keyManager,
       storage: widget.storage,
       lockController: _lock,
+      sync: widget.sync,
       child: MaterialApp(
         navigatorKey: _navigatorKey,
         scaffoldMessengerKey: _messengerKey,

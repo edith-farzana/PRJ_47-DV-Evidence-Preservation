@@ -1,4 +1,4 @@
-package com.example.secure_evidence_app
+package com.pocketcalc.calculator
 
 import android.os.Bundle
 import android.view.WindowManager

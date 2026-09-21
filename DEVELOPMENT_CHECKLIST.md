@@ -1,7 +1,7 @@
 # Secure Evidence — Development Checklist
 
-**Branch for this work:** `feature/security-layer`
-**Last updated:** 2026-09-18
+**Branch for this work:** `feature/p4-safety-fixes`
+**Last updated:** 2026-09-21
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
 
@@ -297,6 +297,23 @@ Correctness bugs with direct safety consequences for the people this app is for.
 
 Where "secure read-only database" stops being a claim and becomes something we can demonstrate being enforced.
 
+> **Status 2026-09-21 — code complete, nothing verified yet.**
+>
+> Written: the sync layer (`lib/services/sync/`), the per-item and
+> "Back up all" UI, `firestore.rules`, `storage.rules`, `firebase.json`,
+> the emulator rules tests (`test/rules/`) and the Dart sync tests.
+> `flutter analyze` is clean. **No test has been run and no APK built
+> since**, by agreement — testing happens after the Firebase project
+> exists.
+>
+> Outstanding, and blocked on the Firebase project: `firebase login`,
+> creating the project, `flutterfire configure`, then the gates below.
+>
+> Also done in this pass: `applicationId` and `namespace` moved to
+> `com.pocketcalc.calculator` and the launcher label to "Calculator", so
+> the app drawer no longer announces what this is. The launcher icon is
+> still Flutter's default.
+
 ### Setup
 - [ ] `flutterfire configure` → generates `lib/firebase_options.dart` and `android/app/google-services.json`
 - [ ] Add `com.google.gms.google-services` plugin in `android/app/build.gradle.kts` and the classpath in `android/build.gradle.kts`
@@ -429,15 +446,16 @@ Update this after every gate.
 | P1 Crypto core | 14% | ✅ Gate passed | 23/23 tests green, analyzer clean |
 | P2 Key & PIN management | 11% | ✅ Built, device check pending | 62/62 tests green, APK builds; manual device pass outstanding |
 | P3 Storage hardening | 9% | ✅ Built, device check pending | 85/85 tests green, APK builds; manual device pass outstanding |
-| P4 Safety fixes | 9% | Not started | — |
-| P5 Firebase + rules | 13% | Not started | — |
+| P4 Safety fixes | 9% | ✅ Built, device check pending | 108/108 tests green; manual device pass (DCIM check) outstanding |
+| P5 Firebase + rules | 13% | 🟡 Code complete, unverified | Sync layer, rules, rules tests and Dart tests written; analyzer clean. Needs the Firebase project, then every gate |
 | P6 Audit log | 10% | Not started | — |
-| P7 Verification & export | 13% | Not started | — |
+| P7 Verification & export | 13% | 🟡 Part done early | Evidence viewing, playback and on-demand integrity verification built (11 tests). Court export and recovery key outstanding |
 | P8 Offline sync | 9% | Not started | — |
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~61%** — baseline + P0 (5/6 tasks, ~3%) + P1 (14%) + P2 (11%) + P3 (9%); P2 and P3 pending their on-device checks
+**Current: ~70% verified** — baseline + P0 (~3%) + P1 (14%) + P2 (11%) + P3 (9%) + P4 (9%); P2-P4 still pending their on-device checks
+**~83% once P5 passes its gates**, plus part of P7 brought forward (viewing and verification)
 **Review target: 65%**
 
 ---

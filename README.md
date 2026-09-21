@@ -10,21 +10,25 @@
 
 ## 🚧 Current Status
 
-**This project is under active development — approximately 28% complete.**
+**This project is under active development — approximately 70% complete, with the backend written but not yet verified.**
 
 This README describes the **design goals** of Secure Evidence. Sections below marked 🔴 are specified and planned but **not yet implemented**. We are documenting the target architecture openly rather than describing unbuilt features as if they shipped.
 
 **Working today**
 - ✅ Functional decoy calculator front-end with hidden unlock sequence
 - ✅ User-chosen PIN and unlock sequence; the PIN unlocks a Keystore-protected master key, with persistent lockout (unit tested)
-- ✅ Photo, video and audio capture
+- ✅ In-app photo, video and audio capture — nothing is written to the device gallery
 - ✅ Encrypted local evidence store: AES-256-GCM per file, encrypted index with rollback detection, plaintext source destroyed after a verified write
-- ✅ Evidence vault listing with timestamps and metadata
+- ✅ Evidence vault, with playback and on-demand integrity verification; the decrypted copy is destroyed when the screen closes
+- ✅ Panic (hold anywhere for a second), auto-lock on backgrounding, screenshots and the recents thumbnail blocked
 - ✅ Emergency helpline directory
 
-**In progress**
-- 🔴 Firebase backend with server-enforced immutability
+**Written, not yet verified**
+- 🟡 Firebase backend with server-enforced immutability, and per-item opt-in cloud backup. The security rules and their emulator tests exist; nothing has run against a live project yet
+
+**Not built**
 - 🔴 Tamper-evident audit log
+- 🔴 Court-export bundle and the recovery key that would let a backup be restored to a different phone
 
 See **[`DEVELOPMENT_CHECKLIST.md`](DEVELOPMENT_CHECKLIST.md)** for the full build plan and **[`docs/SECURITY.md`](docs/SECURITY.md)** for the security design and threat model.
 
@@ -44,10 +48,10 @@ A familiar interface helps keep the purpose of the application private.
 ✅ 📸 **Evidence Preservation**  
 Sensitive evidence can be captured and preserved within a protected environment.
 
-🔴 🔒 **Layered Security**  
+✅ 🔒 **Layered Security**  
 Evidence is protected through a purpose-built encryption and integrity architecture.
 
-🔴 🧬 **Evidence Integrity**  
+✅ 🧬 **Evidence Integrity**  
 The system is designed to help establish that preserved evidence has not been silently altered.
 
 🔴 📋 **Traceability**  
@@ -56,7 +60,7 @@ Evidence-related information and events are structured to support accountability
 🔴 ☁️ **Long-Term Preservation**  
 Designed for secure storage, synchronization and resilient evidence preservation.
 
-🔴 🚨 **Panic Protection**  
+✅ 🚨 **Panic Protection**  
 A rapid return to the discreet interface when immediate privacy is required.
 
 ---
@@ -67,13 +71,13 @@ Digital evidence is only useful when its **authenticity, integrity, provenance, 
 
 Secure Evidence is designed to support these principles through:
 
-🟢 **Protected Evidence**  
+✅ **Protected Evidence**  
 Sensitive content is secured through a layered encryption architecture.
 
 ✅ **Time & Metadata**  
 Relevant evidence information is preserved alongside the captured material.
 
-🔴 **Integrity Verification**  
+✅ **Integrity Verification**  
 Cryptographic mechanisms are designed to detect unauthorized alteration.
 
 🔴 **Auditability**  
@@ -123,18 +127,20 @@ Security through obscurity protects nobody. The full cryptographic design, key h
 `Flutter` · `Dart` · `Android`
 
 **Capture & storage**  
-`camera` · `image_picker` · `record` · `path_provider`
-
-### 🔴 Planned
+`camera` · `record` · `path_provider` · `video_player`
 
 **Security**  
 `AES-256-GCM` · `SHA-256` · `PBKDF2-HMAC-SHA256` · `Envelope Encryption` · `Android Keystore`
 
+### 🟡 Written, not yet verified
+
 **Backend**  
 `Firebase Anonymous Auth` · `Cloud Firestore` · `Firebase Storage` · `Firestore Security Rules`
 
+### 🔴 Planned
+
 **Integrity**  
-`Hash-chained audit log` · `Server-enforced immutability` · `Client-side encryption`
+`Hash-chained audit log`
 
 > **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them. Rationale is in [`docs/SECURITY.md`](docs/SECURITY.md).
 

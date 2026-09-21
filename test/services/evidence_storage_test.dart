@@ -352,10 +352,9 @@ void main() {
       expect(preview.path, startsWith(storage.previewDirectory.path));
       expect(preview.path, isNot(startsWith(storage.directory.path)));
 
-      final stored = storage.directory
-          .listSync()
-          .whereType<File>()
-          .map((file) => file.path);
+      final stored = storage.directory.listSync().whereType<File>().map(
+        (file) => file.path,
+      );
 
       expect(stored.every((path) => !path.endsWith('.jpg')), isTrue);
     });
@@ -405,10 +404,7 @@ void main() {
 
       keyManager.lock();
 
-      await expectLater(
-        storage.openPreview(item),
-        throwsA(isA<StateError>()),
-      );
+      await expectLater(storage.openPreview(item), throwsA(isA<StateError>()));
     });
   });
 
@@ -427,10 +423,7 @@ void main() {
 
       expect(report.verified, isTrue);
       expect(report.failure, isNull);
-      expect(
-        report.recalculatedPlaintextSha256,
-        equals(item.plaintextSha256),
-      );
+      expect(report.recalculatedPlaintextSha256, equals(item.plaintextSha256));
       expect(
         report.recalculatedCiphertextSha256,
         equals(item.ciphertextSha256),

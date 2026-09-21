@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Encrypted evidence blobs. AES-256-GCM ciphertext only: the key that
+// opens them never leaves the survivor's phone, so what is stored here
+// is unreadable to us and to anyone who breaches us.
+//
+// `resource == null` on create is what forbids an overwrite -- without
+// it, "upload the same path again" would be a way to replace evidence
+// with something else while every record still looked untouched.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/evidence/{blob} {
+      allow read:   if isOwner(uid);
+      allow create: if isOwner(uid) && resource == null;
+      allow update, delete: if false;
+    }
+  }
+}

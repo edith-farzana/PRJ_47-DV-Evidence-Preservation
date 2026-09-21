@@ -22,24 +22,15 @@ void main() {
     });
 
     test('returns an error for an empty PIN', () {
-      expect(
-        validator.validate(''),
-        'Please enter your PIN.',
-      );
+      expect(validator.validate(''), 'Please enter your PIN.');
     });
 
     test('returns an error for non-numeric PIN', () {
-      expect(
-        validator.validate('12ab'),
-        'PIN must contain numbers only.',
-      );
+      expect(validator.validate('12ab'), 'PIN must contain numbers only.');
     });
 
     test('returns an error for incorrect PIN length', () {
-      expect(
-        validator.validate('123'),
-        'PIN must be 4 digits.',
-      );
+      expect(validator.validate('123'), 'PIN must be 4 digits.');
     });
 
     test('returns null for a valid PIN', () {
