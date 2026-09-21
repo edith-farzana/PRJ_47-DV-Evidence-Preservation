@@ -245,30 +245,49 @@ Makes "read-only" and "encrypted at rest" true locally.
 
 Correctness bugs with direct safety consequences for the people this app is for.
 
+> 🟡 **Code complete 2026-09-19, awaiting the manual device pass.**
+> `flutter analyze` clean, `flutter test` green — 108/108 (85 existing +
+> 17 lock-controller + 6 panic widget tests), `flutter build apk --debug`
+> succeeds.
+
 ### 1. Panic button (currently crashes)
-- [ ] `lib/app/app_lock_controller.dart` (new) — a `ChangeNotifier` holding `locked` / `showPin` / `unlocked`, replacing the three `setState` booleans in `_SecureEvidenceAppState`
-- [ ] Panic: zero keys in memory → pop to root → calculator with a cleared display
-- [ ] Fix `lib/features/home/home_page.dart:100` — `pushReplacementNamed('/pin')` throws because no named routes are registered
-- [ ] Add a long-press trigger so panic works without navigating home first
+- [x] `lib/app/app_lock_controller.dart` (new) — a `ChangeNotifier` holding `locked` / `showPin` / `unlocked` (`AppLockState`; Flutter already has a `LockState`), replacing the `setState` booleans in `_SecureEvidenceAppState`
+- [x] Panic: zero keys in memory → pop to root → calculator with a cleared display. The key is destroyed synchronously *before* listeners run; the shell then pops every route (sheets and dialogs included) and **clears snackbars**, so "Photo saved to My Evidence" cannot linger over the calculator
+- [x] Fix `lib/features/home/home_page.dart:100` — the panic card now calls `lockController.lock()`
+- [x] Add a long-press trigger so panic works without navigating home first — hold anywhere for 1 s while unlocked (longer than the 500 ms platform long-press, so text selection still wins in text fields)
 
 ### 2. Stop photos leaking into the gallery
-- [ ] `lib/features/evidence/capture/in_app_camera_page.dart` (new) — in-app capture using the `camera` package (already in `pubspec.yaml`, currently unused), writing straight to app temp
-- [ ] Retire `image_picker` for camera capture in `camera_capture_page.dart`
+- [x] `lib/features/evidence/capture/in_app_camera_page.dart` (new) — in-app photo **and video** capture with the `camera` package. CameraX writes only to the app's private cache (`CAP*.jpg`, `REC*.mp4`), never DCIM
+- [x] Retire `image_picker` — `camera_capture_page.dart` deleted and `image_picker` removed from `pubspec.yaml`
+- [x] *(found during P4)* Plaintext captures could outlive the capture screen: leaving the audio page mid-recording left an unencrypted `.m4a` in the cache. New `capture_temp.dart`: every capture lives in `<cache>/capture/` until encrypted; pages destroy unsaved files on dispose; `main()` sweeps that directory and stray CameraX files at launch. The zero-then-delete routine moved out of `EvidenceStorage` into `services/storage/secure_delete.dart` so both use it
 
 ### 3. Screen privacy
-- [ ] `FLAG_SECURE` in `MainActivity.kt` — blocks screenshots and the recents-screen thumbnail
+- [x] `FLAG_SECURE` in `MainActivity.kt` — set before `super.onCreate`, so no frame is drawn without it
 
 ### 4. Auto-lock
-- [ ] `WidgetsBindingObserver` on `AppLifecycleState.paused` / `inactive` → lock immediately, drop keys
-- [ ] Wire the currently-dead auto-lock toggle in `_SettingsPageState` and persist the preference
+- [x] `WidgetsBindingObserver` on `AppLifecycleState.paused` / `hidden` → lock immediately, drop keys. The PIN screen also falls back to the calculator
+  - **Deviation: not on `inactive`.** On Android `inactive` also fires for permission dialogs and the notification shade, so locking there would throw the user out of the camera while it asks for permission
+  - **Captures hold off auto-lock.** Recording audio with the screen off is a core use, and screen-off pauses the app. While a capture or its save is in flight, auto-lock is deferred; it runs the moment the capture ends if the app is still in the background. A video in progress when the app is backgrounded is stopped and saved first. **Panic ignores holds**
+- [x] Wire the currently-dead auto-lock toggle in `_SettingsPageState` and persist the preference (secure store key `app.v1.autoLock`, default on)
+- [ ] Biometric toggle is still dead UI — out of P4 scope, but it should be hidden or wired before the review
 
 ### Tests — `test/app/app_lock_controller_test.dart`, `test/widget/panic_test.dart` (new)
-- [ ] Panic transitions unlocked → calculator and clears the in-memory key reference
-- [ ] After panic, reaching the vault again requires the PIN
-- [ ] Lifecycle `paused` locks when auto-lock is on
-- [ ] Lifecycle `paused` does not lock when auto-lock is off
-- [ ] Widget test: pump app → unlock → panic → `CalculatorPage` showing and display reads `0`
-- [ ] Existing `test/widget_test.dart` smoke test still passes
+- [x] Panic transitions unlocked → calculator and clears the in-memory key reference
+- [x] After panic, reaching the vault again requires the PIN
+- [x] Lifecycle `paused` locks when auto-lock is on
+- [x] Lifecycle `paused` does not lock when auto-lock is off
+- [x] Widget test: pump app → unlock → panic → `CalculatorPage` showing and display reads `0`
+- [x] Existing `test/widget_test.dart` smoke test still passes
+- [x] *(extra)* `inactive` does not lock; capture holds defer and then run auto-lock; holding 1 s panics over an open sheet; a 600 ms hold does not; panic clears snackbars
+- [x] *(found during P4)* Settings `ListTile`s sat in coloured `Container`s — a debug assertion and invisible ink. Now `Material`
+
+### Manual device pass (not yet done)
+- [ ] Panic: tap the card, and separately hold 1 s on the vault / camera / an open sheet → calculator showing `0`, no snackbar
+- [ ] **Capture a photo and a video, then open a file manager and confirm neither is in DCIM**
+- [ ] Screenshot attempt is blocked; the recents screen shows a blank card
+- [ ] Auto-lock on: press home → reopen → calculator. Auto-lock off: reopen → still in the vault
+- [ ] Start audio recording, turn the screen off for 30 s, turn it on, stop → the recording saves; then background the app → locks
+- [ ] Camera permission denied → readable message, no crash
 
 **Gate:** `flutter test` green · manual device pass on all four items — **especially: capture a photo, then open a file manager and confirm it is not in DCIM** · commit `P4: safety fixes`
 

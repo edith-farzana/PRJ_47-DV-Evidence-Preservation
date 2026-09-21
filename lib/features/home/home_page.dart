@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../app/app_scope.dart';
 import '../../services/crypto/key_manager.dart';
 import '../auth/presentation/change_pin_page.dart';
 import '../evidence/capture/audio_capture_page.dart';
-import '../evidence/capture/camera_capture_page.dart';
+import '../evidence/capture/in_app_camera_page.dart';
 import '../vault/evidence_vault_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -79,9 +80,7 @@ class _HomeContent extends StatelessWidget {
 
   void _openCamera(BuildContext context, {required bool videoMode}) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CameraCapturePage(videoMode: videoMode),
-      ),
+      MaterialPageRoute(builder: (_) => InAppCameraPage(videoMode: videoMode)),
     );
   }
 
@@ -101,7 +100,7 @@ class _HomeContent extends StatelessWidget {
   }
 
   void _panic(BuildContext context) {
-    Navigator.of(context).pushReplacementNamed('/pin');
+    AppScope.of(context).lockController.lock();
   }
 
   @override
@@ -600,7 +599,7 @@ class _PanicCard extends StatelessWidget {
                     SizedBox(height: 4),
 
                     Text(
-                      'Return immediately to the calculator.',
+                      'Back to the calculator. Or hold anywhere for 1s.',
                       style: TextStyle(color: HomePage.textMuted, fontSize: 12),
                     ),
                   ],
@@ -738,11 +737,12 @@ class _SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<_SettingsPage> {
-  bool autoLock = true;
   bool biometric = false;
 
   @override
   Widget build(BuildContext context) {
+    final lockController = AppScope.of(context).lockController;
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -764,31 +764,31 @@ class _SettingsPageState extends State<_SettingsPage> {
 
         const SizedBox(height: 25),
 
-        Container(
-          decoration: BoxDecoration(
-            color: HomePage.cardColor,
-            borderRadius: BorderRadius.circular(18),
-          ),
+        Material(
+          // Material, not a coloured Container: ListTile paints its ink
+          // on the nearest Material, which a Container would cover.
+          color: HomePage.cardColor,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              SwitchListTile(
-                value: autoLock,
-                onChanged: (value) {
-                  setState(() {
-                    autoLock = value;
-                  });
-                },
-                title: const Text(
-                  'Auto-lock',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: const Text(
-                  'Lock after inactivity.',
-                  style: TextStyle(color: HomePage.textMuted),
-                ),
-                secondary: const Icon(
-                  Icons.timer_outlined,
-                  color: HomePage.purple,
+              ListenableBuilder(
+                listenable: lockController,
+                builder: (context, _) => SwitchListTile(
+                  value: lockController.autoLock,
+                  onChanged: lockController.setAutoLock,
+                  title: const Text(
+                    'Auto-lock',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: const Text(
+                    'Lock whenever the app leaves the screen.',
+                    style: TextStyle(color: HomePage.textMuted),
+                  ),
+                  secondary: const Icon(
+                    Icons.timer_outlined,
+                    color: HomePage.purple,
+                  ),
                 ),
               ),
 
@@ -820,11 +820,12 @@ class _SettingsPageState extends State<_SettingsPage> {
 
         const SizedBox(height: 15),
 
-        Container(
-          decoration: BoxDecoration(
-            color: HomePage.cardColor,
-            borderRadius: BorderRadius.circular(18),
-          ),
+        Material(
+          // Material, not a coloured Container: ListTile paints its ink
+          // on the nearest Material, which a Container would cover.
+          color: HomePage.cardColor,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
           child: ListTile(
             leading: const Icon(
               Icons.password_outlined,

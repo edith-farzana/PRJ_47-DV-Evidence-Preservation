@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_scope.dart';
 import '../../models/evidence/evidence_item.dart';
 import '../../services/storage/evidence_index.dart';
+import '../evidence/detail/evidence_detail_page.dart';
 
 class EvidenceVaultPage extends StatefulWidget {
   const EvidenceVaultPage({super.key});
@@ -176,6 +177,11 @@ class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
                   item: item,
                   icon: _iconFor(item.type),
                   date: _date(item),
+                  onOpen: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EvidenceDetailPage(item: item),
+                    ),
+                  ),
                 );
               },
             ),
@@ -190,80 +196,90 @@ class _EvidenceCard extends StatelessWidget {
   final EvidenceItem item;
   final IconData icon;
   final String date;
+  final VoidCallback onOpen;
 
   const _EvidenceCard({
     required this.item,
     required this.icon,
     required this.date,
+    required this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF11151D),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFF242934)),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: const Color(0xFF9B7BFF).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(icon, color: const Color(0xFF9B7BFF), size: 27),
-          ),
-
-          const SizedBox(width: 14),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.typeLabel,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  item.originalFileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF9297A3),
-                    fontSize: 12,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  '$date • ${item.fileSizeLabel}',
-                  style: const TextStyle(
-                    color: Color(0xFF9297A3),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          _ProtectionBadge(item: item),
-        ],
+      // Material, not a bare Container: otherwise the card's colour is
+      // painted over the tap ripple.
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(padding: const EdgeInsets.all(16), child: _body()),
+        ),
       ),
+    );
+  }
+
+  Widget _body() {
+    return Row(
+      children: [
+        Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            color: const Color(0xFF9B7BFF).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Icon(icon, color: const Color(0xFF9B7BFF), size: 27),
+        ),
+
+        const SizedBox(width: 14),
+
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.typeLabel,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(
+                item.originalFileName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Color(0xFF9297A3), fontSize: 12),
+              ),
+
+              const SizedBox(height: 4),
+
+              Text(
+                '$date • ${item.fileSizeLabel}',
+                style: const TextStyle(color: Color(0xFF9297A3), fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(width: 8),
+
+        _ProtectionBadge(item: item),
+
+        const Icon(Icons.chevron_right, color: Color(0xFF9297A3), size: 20),
+      ],
     );
   }
 }

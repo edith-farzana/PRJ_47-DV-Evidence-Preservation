@@ -322,4 +322,185 @@ void main() {
       );
     });
   });
+
+  // =================================================================
+  // Viewing evidence
+  // =================================================================
+
+  group('opening evidence for viewing', () {
+    test('decrypts back to exactly the captured bytes', () async {
+      final original = fakeJpeg();
+
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', original),
+        type: EvidenceType.photo,
+      );
+
+      final preview = await storage.openPreview(item);
+
+      expect(await preview.readAsBytes(), equals(original));
+    });
+
+    test('the plaintext never lands in the evidence directory', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      final preview = await storage.openPreview(item);
+
+      expect(preview.path, startsWith(storage.previewDirectory.path));
+      expect(preview.path, isNot(startsWith(storage.directory.path)));
+
+      final stored = storage.directory
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.path);
+
+      expect(stored.every((path) => !path.endsWith('.jpg')), isTrue);
+    });
+
+    test('keeps the original extension, so a player can decode it', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('clip.mp4', fakeMp4()),
+        type: EvidenceType.video,
+      );
+
+      expect((await storage.openPreview(item)).path, endsWith('.mp4'));
+    });
+
+    test('closing destroys the decrypted copy', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      final preview = await storage.openPreview(item);
+      expect(await preview.exists(), isTrue);
+
+      await storage.closePreview(preview);
+
+      expect(await preview.exists(), isFalse);
+    });
+
+    test('a preview left by a crash is swept at launch', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      // Opened and never closed: what a force-stop leaves behind.
+      final orphan = await storage.openPreview(item);
+
+      await newStorage().sweepPreviews();
+
+      expect(await orphan.exists(), isFalse);
+    });
+
+    test('is refused while the vault is locked', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      keyManager.lock();
+
+      await expectLater(
+        storage.openPreview(item),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
+  // =================================================================
+  // Integrity verification
+  // =================================================================
+
+  group('integrity verification', () {
+    test('untouched evidence verifies, and the hashes match', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      final report = await storage.checkIntegrity(item);
+
+      expect(report.verified, isTrue);
+      expect(report.failure, isNull);
+      expect(
+        report.recalculatedPlaintextSha256,
+        equals(item.plaintextSha256),
+      );
+      expect(
+        report.recalculatedCiphertextSha256,
+        equals(item.ciphertextSha256),
+      );
+    });
+
+    test('a modified blob fails, and says the stored file moved', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      final blob = File(item.filePath);
+      final bytes = await blob.readAsBytes();
+      bytes[bytes.length ~/ 2] ^= 0x01;
+      await blob.writeAsBytes(bytes);
+
+      final report = await storage.checkIntegrity(item);
+
+      expect(report.verified, isFalse);
+      expect(report.ciphertextMatches, isFalse);
+      // Decryption fails outright, so there is no plaintext to re-hash.
+      expect(report.recalculatedPlaintextSha256, isNull);
+      expect(report.failure, isNotNull);
+    });
+
+    test('a missing blob is a finding, not a pass', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      await File(item.filePath).delete();
+
+      final report = await storage.checkIntegrity(item);
+
+      expect(report.blobExists, isFalse);
+      expect(report.verified, isFalse);
+      expect(report.failure, contains('missing'));
+    });
+
+    test('verification leaves no decrypted copy behind', () async {
+      final item = await storage.addEvidence(
+        sourceFile: await writeSource('photo.jpg', fakeJpeg()),
+        type: EvidenceType.photo,
+      );
+
+      await storage.checkIntegrity(item);
+
+      final left = storage.previewDirectory.existsSync()
+          ? storage.previewDirectory.listSync()
+          : const <FileSystemEntity>[];
+
+      expect(left, isEmpty);
+    });
+
+    test('a record with no crypto metadata cannot be verified', () async {
+      final legacy = EvidenceItem(
+        id: 'legacy',
+        type: EvidenceType.photo,
+        filePath: '/nowhere/legacy.jpg',
+        originalFileName: 'legacy.jpg',
+        capturedAt: DateTime.utc(2026, 1, 1),
+        fileSizeBytes: 10,
+      );
+
+      final report = await storage.checkIntegrity(legacy);
+
+      expect(report.verified, isFalse);
+      expect(report.failure, contains('before evidence was encrypted'));
+    });
+  });
 }

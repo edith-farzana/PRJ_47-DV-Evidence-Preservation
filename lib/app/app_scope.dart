@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../services/crypto/key_manager.dart';
 import '../services/storage/evidence_storage.dart';
+import 'app_lock_controller.dart';
 
 /// Makes the app's long-lived services reachable from any screen,
 /// including routes pushed with Navigator, without threading them
@@ -11,11 +12,13 @@ class AppScope extends InheritedWidget {
     super.key,
     required this.keyManager,
     required this.storage,
+    required this.lockController,
     required super.child,
   });
 
   final KeyManager keyManager;
   final EvidenceStorage storage;
+  final AppLockController lockController;
 
   static AppScope of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
@@ -27,5 +30,7 @@ class AppScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(AppScope oldWidget) =>
-      keyManager != oldWidget.keyManager || storage != oldWidget.storage;
+      keyManager != oldWidget.keyManager ||
+      storage != oldWidget.storage ||
+      lockController != oldWidget.lockController;
 }
