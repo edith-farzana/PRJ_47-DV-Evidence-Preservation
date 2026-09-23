@@ -41,5 +41,20 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
 
+  # Generates the launcher icons from assets/icon/. Build-time only.
+  flutter_launcher_icons: ^0.14.4
+
 flutter:
   uses-material-design: true
+
+# Launcher icon. The app must look like an ordinary calculator in the
+# app drawer -- the decoy is worth nothing if the icon gives it away.
+# Regenerate with: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  # Android 8+ masks the icon to the launcher's shape, so the artwork
+  # sits in the safe zone of its own background rather than full bleed.
+  adaptive_icon_background: "#0F0F0F"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
