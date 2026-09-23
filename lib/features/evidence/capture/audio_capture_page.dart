@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../app/app_lock_controller.dart';
 import '../../../app/app_scope.dart';
 import '../../../models/evidence/evidence_item.dart';
+import '../../../services/storage/secure_delete.dart';
+import 'capture_temp.dart';
 
 class AudioCapturePage extends StatefulWidget {
   const AudioCapturePage({super.key});
@@ -27,11 +29,32 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
 
   Duration _duration = Duration.zero;
 
+  /// The plaintext recording, until it has been encrypted.
+  File? _file;
+
+  /// Set while this page is deferring auto-lock.
+  AppLockController? _lockHold;
+
   @override
   void dispose() {
     _timer?.cancel();
-    _recorder.dispose();
+    _releaseLockHold();
+
+    // Leaving mid-recording (back, panic, auto-lock) discards it: the
+    // plaintext must not outlive this screen. Mid-save, addEvidence
+    // still owns the file; _stopRecording cleans it up if the save fails.
+    final unsaved = _saving ? null : _file;
+    _recorder.stop().whenComplete(() async {
+      await _recorder.dispose();
+      if (unsaved != null) await destroyPlaintext(unsaved);
+    });
+
     super.dispose();
+  }
+
+  void _releaseLockHold() {
+    _lockHold?.releaseAutoLock();
+    _lockHold = null;
   }
 
   Future<void> _startRecording() async {
@@ -49,11 +72,14 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
       return;
     }
 
-    final directory = await getTemporaryDirectory();
+    final file = await CaptureTemp.newFile('m4a');
 
-    final fileName = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    if (!mounted) return;
 
-    final path = '${directory.path}/$fileName';
+    // Keep the key while the screen is off, so the recording can still
+    // be encrypted when it stops.
+    _lockHold = AppScope.of(context).lockController..holdAutoLock();
+    _file = file;
 
     await _recorder.start(
       const RecordConfig(
@@ -61,7 +87,7 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         bitRate: 128000,
         sampleRate: 44100,
       ),
-      path: path,
+      path: file.path,
     );
 
     _startedAt = DateTime.now();
@@ -116,6 +142,9 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         originalFileName: 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
       );
 
+      // addEvidence destroyed the plaintext.
+      _file = null;
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,6 +159,16 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         SnackBar(content: Text('Could not save audio evidence: $e')),
       );
     } finally {
+      _releaseLockHold();
+
+      // The page closed mid-save (panic) and the save then failed:
+      // nothing is left to retry it.
+      final unsaved = _file;
+      if (!mounted && unsaved != null) {
+        _file = null;
+        destroyPlaintext(unsaved);
+      }
+
       if (mounted) {
         setState(() {
           _recording = false;

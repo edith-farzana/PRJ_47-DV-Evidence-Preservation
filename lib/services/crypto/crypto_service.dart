@@ -378,11 +378,7 @@ class CryptoService {
       nonce: nonce,
     );
 
-    return base64.encode([
-      ...nonce,
-      ...box.cipherText,
-      ...box.mac.bytes,
-    ]);
+    return base64.encode([...nonce, ...box.cipherText, ...box.mac.bytes]);
   }
 
   /// Reverses [_wrapDek].

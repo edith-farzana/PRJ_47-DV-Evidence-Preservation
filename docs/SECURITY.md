@@ -2,14 +2,14 @@
 
 **Project:** Secure Evidence — domestic violence evidence preservation
 **Status of this document:** design specification. Sections are marked with their implementation status.
-**Last updated:** 2026-09-18
+**Last updated:** 2026-09-23
 
 > **Implementation status legend**
 > 🔴 **Not built** — specified here, not yet in code
 > 🟡 **Partial** — some of it exists
 > 🟢 **Built** — implemented and covered by tests
 >
-> As of 2026-09-18 the crypto core (P1), key & PIN management (P2) and encrypted on-device storage (P3) are built and tested. The backend, audit log, evidence viewing and export (P5–P7) are not. See `DEVELOPMENT_CHECKLIST.md` for the build order. This document describes the target design so that implementation has something to be checked against — it is **not** a description of the current app.
+> As of 2026-09-21 the crypto core (P1), key & PIN management (P2), encrypted on-device storage (P3) and the safety fixes (P4) are built and tested, as are evidence viewing and on-demand integrity verification (brought forward from P7). The backend (P5) is **written but not yet verified**: the rules and their tests exist, and nothing has been run against a real Firebase project. The audit log (P6) and court export (P7) are not built. See `DEVELOPMENT_CHECKLIST.md` for the build order. This document describes the target design so that implementation has something to be checked against — it is **not** a description of the current app.
 
 ---
 
@@ -118,7 +118,7 @@ The plaintext SHA-256 is passed as **Additional Authenticated Data** to AES-GCM.
 
 This closes an otherwise real attack: without it, someone could swap the stored hash to match a substituted file, and verification would pass. With AAD binding, ciphertext and hash are cryptographically welded together — you cannot alter one without invalidating the other.
 
-### 2.4 Integrity verification 🟡
+### 2.4 Integrity verification 🟢
 
 Two hashes are recorded per item:
 
@@ -150,9 +150,9 @@ Implementation: `lib/services/storage/evidence_storage.dart`, `evidence_index.da
 - **Fails loudly.** An index that is missing, altered, rolled back or undecryptable raises `EvidenceIndexCorruptedException`, and the vault shows a warning. It never shows "No evidence yet", which would tell a survivor their evidence is gone when the files are still there.
 - **Append-only by construction:** `EvidenceStorage` deliberately exposes no `deleteEvidence()` or `updateEvidence()`.
 
-> **Not yet built:** viewing evidence (decrypt to a temp file, deleted on dispose) is P7. The source overwrite is best-effort; see §5 item 7. Photos taken through `image_picker` may also persist in the system gallery until P4 replaces it.
+> **Viewing** decrypts into a preview directory inside the cache, destroys the copy when the screen closes, and sweeps anything a crash left behind at the next launch. The source overwrite is best-effort; see §5 item 7.
 
-### 3.2 Backend — Firebase 🔴
+### 3.2 Backend — Firebase 🟡
 
 ```
 Firestore:  /users/{uid}/evidence/{evidenceId}    ← metadata + wrapped key, ALWAYS
@@ -180,14 +180,22 @@ Storage rules likewise deny overwrite (`resource == null` required on create) an
 
 **This is the strongest property in the system.** It means that once a record reaches the server, neither an abuser who seizes the phone, nor the victim under coercion, nor a developer with console access, nor an attacker with the user's credentials can delete or alter it. The client cannot opt out, because the rule is evaluated server-side.
 
-### 3.3 What actually leaves the device 🔴
+### 3.3 What actually leaves the device 🟡
+
+> **As built, 2026-09-23: only metadata leaves the device — nothing else.**
+> Firebase Storage is not enabled on the project, so there is nowhere to put
+> an encrypted blob and the app does not try. The backup control is still
+> present and explains this when tapped. The table below describes the design
+> once Storage is switched on; until then the "encrypted blob" row never
+> happens, and the honest claim is the stronger and simpler one: **no evidence
+> media has ever left the phone.**
 
 **Decision of 2026-09-16: media stays local by default.**
 
 | Leaves the device | When | Why it is safe to store |
 |---|---|---|
 | Metadata — both SHA-256 hashes, wrapped DEK, nonce, GCM tag, timestamp, size, type | **Always** | The wrapped DEK is encrypted under a master key derived from the PIN, which never leaves the device. To Firebase it is indistinguishable from noise |
-| Encrypted blob | **Only when the user explicitly enables backup for that item** | AES-256-GCM ciphertext. Unreadable without the PIN |
+| Encrypted blob | **Only when the user explicitly enables backup for that item** — and not at all today, see the note above | AES-256-GCM ciphertext. Unreadable without the PIN |
 | Filename, location, notes, anything identifying | **Never** | Not collected |
 
 **On the privacy rationale.** The decision was motivated by not wanting to hold survivor media. It is worth recording that client-side encryption already addressed that: under the original design Firebase would only ever have received ciphertext, so a breach, a subpoena or a curious operator would all have obtained the same useless bytes (adversary A6). Holding encrypted media is not the same as holding media.
@@ -213,10 +221,10 @@ Backed-up items get both properties. The UI must state this difference plainly a
 |---|---|---|
 | Decoy calculator front-end | 🟢 Built | Fully functional calculator, not a stub — it survives casual use |
 | Hidden unlock sequence | 🟢 Built | User-chosen at first run, stored in secure storage. Must contain an operator, so ordinary calculator use can't trigger it by accident |
-| Evidence never in device gallery | 🔴 Not built | **Current code uses `image_picker`, which hands off to the system camera app; captures can persist in DCIM.** P4 replaces this with in-app capture |
-| Screenshot / recents blocking | 🔴 Not built | `FLAG_SECURE`, P4 |
-| Panic return to calculator | 🔴 Broken | `home_page.dart:100` calls an unregistered named route and throws. P4 |
-| Auto-lock on backgrounding | 🔴 Not built | P4 |
+| Evidence never in device gallery | 🟢 Built | In-app camera writes only to app-private storage. `image_picker` is gone |
+| Screenshot / recents blocking | 🟢 Built | `FLAG_SECURE`, set before the first frame is drawn |
+| Panic return to calculator | 🟢 Built | Hold anywhere for 1s. The key is destroyed before anything redraws |
+| Auto-lock on backgrounding | 🟢 Built | On `paused` and `hidden`, not `inactive`. A running capture defers it |
 | Duress PIN → decoy vault | 🔴 Not built | P9 |
 
 ### 4.2 Access control 🟡
@@ -225,7 +233,7 @@ Backed-up items get both properties. The UI must state this difference plainly a
 - 🟢 **Lockout:** 4 free attempts, then 30s → 1m → 2m → 5m → 15m → 1h (repeating). The counter and lock time are persisted in secure storage, so restarting the app does not reset them. The attempt is recorded **before** the slow key derivation starts, so killing the app mid-guess doesn't give a free try.
 - 🟢 **Change PIN** goes through the same lockout. Otherwise it would be a way round it.
 - 🟢 **No wipe after N failures, deliberately.** In most apps that's a security feature. Here it would hand an abuser a way to destroy the evidence just by typing wrong PINs.
-- 🟡 The master key is zeroed in memory on lock (`SecretKeyData.destroy()` overwrites the bytes). Locking on panic and on backgrounding comes in P4.
+- 🟢 The master key is zeroed in memory on lock (`SecretKeyData.destroy()` overwrites the bytes), and panic and backgrounding both lock.
 - 🟢 A corrupted key record fails loudly (`KeyStoreCorruptedException`) instead of silently creating a new master key, which would orphan every existing file.
 
 ### 4.3 Audit log 🔴

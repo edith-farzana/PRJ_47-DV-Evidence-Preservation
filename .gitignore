@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Firebase project credentials, written by `flutterfire configure`.
+# These identify the project and must not be committed.
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+
+# Rules-test dependencies
+test/rules/node_modules/

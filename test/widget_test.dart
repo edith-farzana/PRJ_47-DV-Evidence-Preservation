@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:secure_evidence_app/app/app.dart';
+import 'package:secure_evidence_app/app/app_lock_controller.dart';
 import 'package:secure_evidence_app/features/auth/presentation/pin_page.dart';
 import 'package:secure_evidence_app/features/auth/presentation/setup_page.dart';
 import 'package:secure_evidence_app/features/calculator/presentation/calculator_page.dart';
@@ -11,6 +12,7 @@ import 'package:secure_evidence_app/services/crypto/key_manager.dart';
 import 'package:secure_evidence_app/services/storage/evidence_storage.dart';
 
 import 'helpers/fake_secure_store.dart';
+import 'helpers/offline_sync.dart';
 
 /// The app under test. Nothing here touches storage, so the directory
 /// is never created.
@@ -25,6 +27,8 @@ SecureEvidenceApp buildApp({String? unlockSequence}) {
       keyManager: keyManager,
       store: store,
     ),
+    lockController: AppLockController(keyManager: keyManager, store: store),
+    sync: offlineSync(),
     unlockSequence: unlockSequence,
   );
 }
