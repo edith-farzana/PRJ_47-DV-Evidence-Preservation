@@ -114,6 +114,20 @@ class FirebaseEvidenceClient implements EvidenceSyncClient {
             SettableMetadata(contentType: 'application/octet-stream'),
           );
     } on FirebaseException catch (error) {
+      // The bucket is named in google-services.json whether or not it
+      // was ever created, so "Storage was never enabled" arrives here
+      // as a not-found. Say that, rather than passing on an error that
+      // reads like the evidence is the problem.
+      if (error.code == 'object-not-found' ||
+          error.code == 'unknown' ||
+          error.code == 'bucket-not-found') {
+        throw const SyncUnavailableException(
+          'Cloud storage is not set up for this project yet, so the file '
+          'copy could not be saved. The evidence on this phone is '
+          'untouched.',
+        );
+      }
+
       throw SyncFailedException('Could not upload evidence: ${error.message}');
     }
   }

@@ -2,7 +2,7 @@
 
 **Project:** Secure Evidence — domestic violence evidence preservation
 **Status of this document:** design specification. Sections are marked with their implementation status.
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-23
 
 > **Implementation status legend**
 > 🔴 **Not built** — specified here, not yet in code
@@ -182,12 +182,20 @@ Storage rules likewise deny overwrite (`resource == null` required on create) an
 
 ### 3.3 What actually leaves the device 🟡
 
+> **As built, 2026-09-23: only metadata leaves the device — nothing else.**
+> Firebase Storage is not enabled on the project, so there is nowhere to put
+> an encrypted blob and the app does not try. The backup control is still
+> present and explains this when tapped. The table below describes the design
+> once Storage is switched on; until then the "encrypted blob" row never
+> happens, and the honest claim is the stronger and simpler one: **no evidence
+> media has ever left the phone.**
+
 **Decision of 2026-09-16: media stays local by default.**
 
 | Leaves the device | When | Why it is safe to store |
 |---|---|---|
 | Metadata — both SHA-256 hashes, wrapped DEK, nonce, GCM tag, timestamp, size, type | **Always** | The wrapped DEK is encrypted under a master key derived from the PIN, which never leaves the device. To Firebase it is indistinguishable from noise |
-| Encrypted blob | **Only when the user explicitly enables backup for that item** | AES-256-GCM ciphertext. Unreadable without the PIN |
+| Encrypted blob | **Only when the user explicitly enables backup for that item** — and not at all today, see the note above | AES-256-GCM ciphertext. Unreadable without the PIN |
 | Filename, location, notes, anything identifying | **Never** | Not collected |
 
 **On the privacy rationale.** The decision was motivated by not wanting to hold survivor media. It is worth recording that client-side encryption already addressed that: under the original design Firebase would only ever have received ciphertext, so a breach, a subpoena or a curious operator would all have obtained the same useless bytes (adversary A6). Holding encrypted media is not the same as holding media.

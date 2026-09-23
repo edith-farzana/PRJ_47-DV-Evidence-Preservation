@@ -95,9 +95,13 @@ void main() {
 
     client = _FakeClient();
 
+    // Most of these cases describe how backup behaves once Storage is
+    // switched on. The group at the end covers it switched off, which
+    // is how the app actually ships today.
     sync = EvidenceSync(
       client: client,
       states: BackupStateStore(FakeSecureStore()),
+      fileBackupEnabled: true,
     );
 
     await sync.load();
@@ -249,6 +253,62 @@ void main() {
       expect(uploaded, 1);
       expect(sync.stateOf('one'), BackupState.failed);
       expect(sync.stateOf('two'), BackupState.backedUp);
+    });
+  });
+
+  group('cloud file backup switched off', () {
+    late EvidenceSync offline;
+
+    setUp(() async {
+      offline = EvidenceSync(
+        client: client,
+        states: BackupStateStore(FakeSecureStore()),
+        fileBackupEnabled: false,
+      );
+
+      await offline.load();
+    });
+
+    test('reports itself unavailable', () {
+      expect(offline.cloudFileBackupAvailable, isFalse);
+    });
+
+    test('backing up refuses, and sends nothing', () async {
+      await expectLater(
+        offline.backUp(await makeItem('one')),
+        throwsA(isA<SyncUnavailableException>()),
+      );
+
+      expect(client.calls, isEmpty);
+    });
+
+    // The item is fine. Badging it FAILED would tell a survivor her
+    // evidence is at risk when only the upload is unavailable.
+    test('the item stays local-only, and is never marked failed', () async {
+      final item = await makeItem('one');
+
+      await expectLater(offline.backUp(item), throwsA(anything));
+
+      expect(offline.stateOf('one'), BackupState.localOnly);
+      expect(offline.stateOf('one'), isNot(BackupState.failed));
+    });
+
+    test('back up all does nothing and reports nothing done', () async {
+      final items = [await makeItem('one'), await makeItem('two')];
+
+      expect(await offline.backUpAll(items), 0);
+      expect(client.calls, isEmpty);
+    });
+
+    // The half that works has to keep working: this is the record that
+    // makes a later deletion provable.
+    test('metadata still reaches the server', () async {
+      final items = [await makeItem('one'), await makeItem('two')];
+
+      await offline.syncPendingMetadata(items);
+
+      expect(client.metadataWrites, ['one', 'two']);
+      expect(client.blobUploads, isEmpty);
     });
   });
 

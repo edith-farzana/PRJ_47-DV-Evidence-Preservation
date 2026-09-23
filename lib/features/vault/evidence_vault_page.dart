@@ -6,6 +6,7 @@ import '../../app/app_scope.dart';
 import '../../models/evidence/backup_state.dart';
 import '../../models/evidence/evidence_item.dart';
 import '../../services/storage/evidence_index.dart';
+import '../evidence/cloud_backup_notice.dart';
 import '../evidence/detail/evidence_detail_page.dart';
 
 class EvidenceVaultPage extends StatefulWidget {
@@ -66,6 +67,11 @@ class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
   Future<void> _backUpAll() async {
     final sync = AppScope.of(context).sync;
     final messenger = ScaffoldMessenger.of(context);
+
+    if (!sync.cloudFileBackupAvailable) {
+      await showCloudBackupNotice(context, multiple: true);
+      return;
+    }
 
     final pending = sync.notBackedUp(_items);
 

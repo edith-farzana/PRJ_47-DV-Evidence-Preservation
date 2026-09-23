@@ -6,6 +6,7 @@ import '../../models/evidence/backup_state.dart';
 import '../../models/evidence/evidence_item.dart';
 import 'backup_state_store.dart';
 import 'evidence_sync_client.dart';
+import 'sync_config.dart';
 
 /// Decides what leaves the phone, and in what order.
 ///
@@ -20,12 +21,27 @@ import 'evidence_sync_client.dart';
 /// No Firebase import: everything goes through [EvidenceSyncClient], so
 /// these decisions are testable with a fake.
 class EvidenceSync extends ChangeNotifier {
-  EvidenceSync({required this._client, required this._states});
+  EvidenceSync({
+    required this._client,
+    required this._states,
+    this._fileBackupEnabled = cloudFileBackupEnabled,
+  });
 
   final EvidenceSyncClient _client;
   final BackupStateStore _states;
 
+  /// Overridable so tests can drive both states; in the app it is
+  /// [cloudFileBackupEnabled].
+  final bool _fileBackupEnabled;
+
   bool get isConfigured => _client.isConfigured;
+
+  /// Whether an encrypted copy can actually be uploaded.
+  ///
+  /// False while Firebase Storage is switched off. Metadata sync is
+  /// unaffected — see [cloudFileBackupEnabled] for what that means.
+  bool get cloudFileBackupAvailable =>
+      _fileBackupEnabled && _client.isConfigured;
 
   /// Loads local state. Contacts nothing.
   Future<void> load() => _states.load();
@@ -75,15 +91,27 @@ class EvidenceSync extends ChangeNotifier {
   /// Throws so the screen that asked can say what went wrong. The local
   /// evidence is never touched by a failure here.
   Future<void> backUp(EvidenceItem item) async {
-    if (!_client.isConfigured) {
+    // Checked before anything else, and before any state is written:
+    // an upload that cannot succeed must not leave the item badged
+    // BACKUP FAILED. Nothing is wrong with her evidence -- the
+    // capability simply is not switched on.
+    if (!cloudFileBackupAvailable) {
       throw const SyncUnavailableException(
-        'Cloud backup is not set up in this build.',
+        'Keeping a cloud copy of the file is not switched on yet. The '
+        'record proving this evidence exists has still been saved.',
       );
     }
 
     final blob = File(item.filePath);
 
     if (!await blob.exists()) {
+      // Recorded as failed, unlike the case above. The difference is
+      // whether a backup was actually attempted: being switched off is
+      // refused up front and changes nothing, while a missing file
+      // means she asked, it did not happen, and something is wrong
+      // that she needs to see.
+      await _setState(item.id, BackupState.failed);
+
       throw SyncFailedException(
         'The encrypted file for this evidence is missing.',
       );
@@ -120,6 +148,10 @@ class EvidenceSync extends ChangeNotifier {
   /// One failure does not stop the rest: returns how many succeeded, so
   /// the caller can report honestly on a partial run.
   Future<int> backUpAll(List<EvidenceItem> items) async {
+    if (!cloudFileBackupAvailable) {
+      return 0;
+    }
+
     var uploaded = 0;
 
     for (final item in items) {

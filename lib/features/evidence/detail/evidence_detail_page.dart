@@ -10,6 +10,7 @@ import '../../../models/evidence/integrity_report.dart';
 import '../../../services/storage/evidence_storage.dart';
 import '../../../services/sync/evidence_sync.dart';
 import '../../../services/sync/evidence_sync_client.dart';
+import '../cloud_backup_notice.dart';
 import 'integrity_page.dart';
 
 /// Shows one piece of evidence: the media itself, what was recorded
@@ -524,6 +525,14 @@ class _BackupCardState extends State<_BackupCard> {
   bool _busy = false;
 
   Future<void> _backUp(EvidenceSync sync) async {
+    // The button stays, so the feature is visible and its absence is
+    // explained -- rather than silently missing, or failing slowly
+    // against a bucket that does not exist.
+    if (!sync.cloudFileBackupAvailable) {
+      await showCloudBackupNotice(context);
+      return;
+    }
+
     setState(() => _busy = true);
 
     try {

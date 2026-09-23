@@ -24,7 +24,8 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 - ✅ Emergency helpline directory
 
 **Written, not yet verified**
-- 🟡 Firebase backend with server-enforced immutability, and per-item opt-in cloud backup. The security rules and their emulator tests exist; nothing has run against a live project yet
+- ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore, where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests
+- 🟡 Per-item opt-in cloud backup of the encrypted files. Built, but **switched off**: Firebase Storage needs a billing account we have not added. The app says so plainly rather than failing. Evidence media has never left the phone
 
 **Not built**
 - 🔴 Tamper-evident audit log

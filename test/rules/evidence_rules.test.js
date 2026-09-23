@@ -181,31 +181,42 @@ describe('backup receipts', () => {
 describe('encrypted blobs in storage', () => {
   const blob = new Uint8Array([1, 2, 3, 4]);
 
+  // A fresh path per test. `clearStorage()` does not reliably empty the
+  // emulator's bucket between tests, and because the rules forbid
+  // overwriting, a leftover object from an earlier test makes the next
+  // upload fail for the wrong reason.
+  let attempt = 0;
+  let id;
+
+  beforeEach(() => {
+    id = `${EVIDENCE_ID}-${++attempt}`;
+  });
+
   it('the owner can upload their own blob', async () => {
     const storage = testEnv.authenticatedContext(ALICE).storage();
 
-    await assertSucceeds(uploadBytes(blobRef(storage), blob));
+    await assertSucceeds(uploadBytes(blobRef(storage, ALICE, id), blob));
   });
 
   it('uploading into another user\'s space is denied', async () => {
     const storage = testEnv.authenticatedContext(MALLORY).storage();
 
-    await assertFails(uploadBytes(blobRef(storage, ALICE), blob));
+    await assertFails(uploadBytes(blobRef(storage, ALICE, id), blob));
   });
 
   it('OVERWRITING an existing blob is denied', async () => {
     const storage = testEnv.authenticatedContext(ALICE).storage();
 
-    await assertSucceeds(uploadBytes(blobRef(storage), blob));
+    await assertSucceeds(uploadBytes(blobRef(storage, ALICE, id), blob));
     await assertFails(
-      uploadBytes(blobRef(storage), new Uint8Array([9, 9, 9, 9])),
+      uploadBytes(blobRef(storage, ALICE, id), new Uint8Array([9, 9, 9, 9])),
     );
   });
 
   it('DELETING a blob is denied', async () => {
     const storage = testEnv.authenticatedContext(ALICE).storage();
 
-    await assertSucceeds(uploadBytes(blobRef(storage), blob));
-    await assertFails(deleteObject(blobRef(storage)));
+    await assertSucceeds(uploadBytes(blobRef(storage, ALICE, id), blob));
+    await assertFails(deleteObject(blobRef(storage, ALICE, id)));
   });
 });

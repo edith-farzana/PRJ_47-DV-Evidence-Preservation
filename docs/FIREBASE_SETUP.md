@@ -26,7 +26,7 @@ Three pieces:
 |---|---|
 | **Authentication** | Gives each phone an anonymous ID. No email, no phone number — an abuser must not be able to spot a confirmation message in her inbox |
 | **Firestore** | A database holding one small record per piece of evidence: its fingerprint, a timestamp, a size. No filenames, no photos, nothing readable |
-| **Storage** | Holds the encrypted files themselves — but only for items the survivor specifically chooses to back up |
+| **Storage** | Would hold the encrypted files themselves, for items the survivor chooses to back up. **Not switched on — see §2.4** |
 
 The important part is a rule we have already written: **once a record is
 created, nobody can change or delete it.** Not the survivor, not us, not
@@ -146,25 +146,29 @@ Do **not** enable Email, Google, or phone sign-in. Anonymous is a deliberate
 safety decision: anything that sends a confirmation message creates a trace in
 an inbox an abuser might be able to read.
 
-### 2.4 Turn on Storage
+### 2.4 Storage — deliberately skipped
 
-**Build → Storage → Get started**. Take the same location as Firestore, and
-again choose **production mode** if it asks.
+**We are not turning Storage on.** It requires a billing account, and we chose
+not to add one for now. Nothing below depends on it.
 
-> **If it asks you to upgrade to the Blaze plan:** Firebase now requires
-> billing to be enabled before Storage can be turned on, even though the free
-> allowance still covers everything we need.
->
-> You have two options, and **both are fine — check with Akash before adding a
-> card**:
->
-> 1. Add a billing account. The free tier is generous and our usage is tiny.
->    Set a budget alert at a low number if it makes you more comfortable.
-> 2. **Skip Storage entirely.** Everything else still works: every piece of
->    evidence still gets its permanent record, and the demo of "delete is
->    denied" still works exactly the same. The only thing missing is uploading
->    the encrypted files themselves. If you skip it, tell Akash so the app can
->    be set to not offer backup.
+What this costs us: encrypted **copies** of the files cannot be kept in the
+cloud, so a lost phone means a lost file.
+
+What it does **not** cost us, which is most of the point:
+
+- Every capture still gets its permanent Firestore record — hashes, timestamp,
+  size — so it can always be proved a file existed and was not altered.
+- The delete-denied demonstration in §8 works exactly the same.
+- The Storage rules are still proved correct by the tests in §6. The emulator
+  runs them locally and needs no billing.
+
+In the app, the **Back up** buttons are still there. Tapping one shows a notice
+explaining that file copies are not switched on yet. That is intended
+behaviour, not a bug.
+
+> **To turn it on later:** enable Storage in the console (accepting the Blaze
+> plan), run `firebase deploy --only storage` to publish the rules, and build
+> the app with `--dart-define=CLOUD_BACKUP=true`. One flag, nothing else.
 
 ---
 
@@ -238,8 +242,11 @@ This is the important one. It uploads the two rule files from the repo to your
 project, replacing the locked-down defaults.
 
 ```bash
-firebase deploy --only firestore:rules,storage
+firebase deploy --only firestore:rules
 ```
+
+> Only Firestore, because there is no Storage bucket to deploy rules to yet
+> (§2.4). Adding `,storage` to that command fails until Storage is enabled.
 
 You should see `✔ Deploy complete!`.
 
@@ -260,6 +267,10 @@ message and try again.
 
 This runs a fake Firebase on your laptop and checks the rules really do refuse
 what they are supposed to refuse. **It never touches your real project.**
+
+This is also how we can be confident about the Storage rules even though
+Storage is switched off: the emulator runs both rule files, needs no billing,
+and proves the same thing a real bucket would.
 
 Install the test dependencies once:
 
@@ -304,15 +315,13 @@ only hashes, a date, a size and a type. No filename, no photo, nothing that
 says who this is. That is the whole design: we hold proof the evidence exists,
 and nothing that could hurt her if it leaked.
 
-Check **Storage** as well: it should be **empty**. Nothing is uploaded unless
-she asks.
+Then, in the app, open the photo and tap **Back up this evidence**. Because
+Storage is off (§2.4), you should get a notice explaining that file copies are
+not switched on yet, and the item should still read **THIS PHONE ONLY**.
 
-Then, in the app, open the photo and tap **Back up this evidence**. Refresh the
-console:
-
-- **Storage** now has one `.enc` file. Download it and try to open it — it will
-  not open in any photo viewer. That is correct; it is encrypted.
-- **Firestore** now has a second collection, `backups`, with a receipt.
+What you should **not** see is a "BACKUP FAILED" badge, or a long pause before
+an error. If you see either, tell Akash — the app is supposed to know up front
+that this is unavailable and not attempt the upload at all.
 
 ---
 
