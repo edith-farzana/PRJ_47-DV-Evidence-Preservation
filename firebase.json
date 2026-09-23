@@ -19,5 +19,28 @@
       "enabled": true
     },
     "singleProjectMode": true
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "evidence-mini-proj",
+          "appId": "1:825611664075:android:2847a7b5848cc97cc5f94e",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "evidence-mini-proj",
+          "configurations": {
+            "android": "1:825611664075:android:2847a7b5848cc97cc5f94e",
+            "ios": "1:825611664075:ios:71ff0706a3f4b48fc5f94e",
+            "macos": "1:825611664075:ios:71ff0706a3f4b48fc5f94e",
+            "web": "1:825611664075:web:43777b0ac3cc1f2cc5f94e",
+            "windows": "1:825611664075:web:24941f891a0167c7c5f94e"
+          }
+        }
+      }
+    }
   }
 }
