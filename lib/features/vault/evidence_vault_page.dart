@@ -9,6 +9,7 @@ import '../../models/evidence/evidence_item.dart';
 import '../../services/storage/evidence_index.dart';
 import '../evidence/cloud_backup_notice.dart';
 import '../evidence/detail/evidence_detail_page.dart';
+import '../export/export_page.dart';
 
 class EvidenceVaultPage extends StatefulWidget {
   const EvidenceVaultPage({super.key});
@@ -180,6 +181,14 @@ class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
         foregroundColor: Colors.white,
         title: const Text('My Evidence'),
         actions: [
+          if (_items.isNotEmpty)
+            IconButton(
+              tooltip: 'Export for a lawyer',
+              icon: const Icon(Icons.ios_share),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => ExportPage(items: _items)),
+              ),
+            ),
           if (_items.isNotEmpty)
             IconButton(
               tooltip: 'Back up all',

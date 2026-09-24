@@ -392,6 +392,45 @@ or three thousand — and all existing evidence still opens with the new PIN.
 Wrong attempts here count towards the same lockout, otherwise this screen would
 be a way around it.
 
+### Exporting evidence for a lawyer or court
+
+Everything above protects evidence *inside* the app. At some point a lawyer or
+a court needs it *outside*. **Export for a lawyer**, in the vault, produces one
+file for that: a ZIP holding
+
+- the evidence she chooses, decrypted,
+- `manifest.pdf` — for each item: its fingerprints, when it was captured,
+  whether it passed verification, and its history from the activity log,
+- `manifest.json` — the same, in a form a computer can check,
+- `README.txt` — how to open the bundle, and how to check it.
+
+This is the one feature that deliberately takes evidence out of protection, so
+it is built around what must not happen:
+
+- **Nothing unverified goes out.** Every item is verified immediately before
+  export. One that fails is left out, and the manifest lists it with the
+  reason — the gap is visible, not silent.
+- **It is password-protected by default.** The bundle is encrypted (AES-256)
+  and the app generates a 20-character password, shown once, to be passed on
+  **separately** — by phone or on paper, never in the same message as the file.
+  That matters here: the email or chat she sends it through may be one an
+  abuser can read. Protection can be switched off for a recipient who cannot
+  open protected files, and the app says plainly what that means.
+- **Nothing decrypted is left on the phone.** The working copies are destroyed
+  as soon as the bundle is made, and the bundle itself is destroyed when she
+  leaves the export screen — including by panic.
+- **Names give nothing away.** Encryption hides what is inside a ZIP but not the
+  file names, so every name is neutral: `item-01.jpg`, never the original, and
+  the bundle is called `bundle-20260924-140233.zip`, not "evidence".
+- **The export is itself recorded** in the activity log, with which items left,
+  because handing evidence over is part of its history.
+
+**Anyone can check the bundle without this app.** Each file's fingerprint can
+be recalculated with tools already on any computer
+(`certutil -hashfile … SHA256` on Windows, `shasum -a 256` on a Mac) and
+compared with the manifest. A bundle that could only be checked with our own
+app would prove very little.
+
 ### What leaves the phone
 
 | Sent | When | Why it is safe |
@@ -399,13 +438,14 @@ be a way around it.
 | Fingerprints, date, file size, the locked file key | For every capture | All of it is either a one-way code or something locked with a key that never leaves the phone. Useless to anyone who intercepts or stores it |
 | The encrypted evidence file itself | **Never, currently** | See below |
 | Name, location, contacts, messages, anything identifying | **Never** | Not collected at all |
+| An export bundle | **Only when she creates one** and chooses where to send it | Password-protected by default; neutral names; no keys, no original filenames, and none of her unlock or panic history |
 
 Backing up encrypted copies of the files is built and tested, but **switched
 off**: it needs a paid Google plan the project has not taken. The buttons are
 still in the app and explain this when tapped.
 
-So today the plain truth is: **no evidence media has ever left the phone.**
-What the server provides is proof, not storage.
+So today the plain truth is: **evidence media leaves the phone only when she
+exports it herself.** What the server provides is proof, not storage.
 
 The app does not contact the internet at all until after the vault is unlocked.
 An app that connects to Google the moment it opens would itself be a clue.
@@ -469,6 +509,12 @@ The evidence is lost with it, because file backup is currently switched off. The
 server records survive and still prove what existed. Turning on backup is one
 configuration change away.
 
+**What if an export bundle is intercepted?**
+If it was protected — the default — it is encrypted, and the password never
+travelled with it. The file names inside reveal nothing. If protection was
+turned off, whoever has the file has the evidence; the app warns about exactly
+this before it lets her turn protection off.
+
 **What if our own server is hacked, or subpoenaed?**
 Whoever obtains it gets fingerprints and locked keys — no photos, no
 recordings, nothing identifying a person. The evidence is encrypted before it
@@ -501,8 +547,9 @@ A system that claims no weaknesses is not credible. The honest list:
   server, like the evidence fingerprints, would close this; it is the natural
   next step. The log's times also come from the phone's clock, which can be
   changed.
-- **It does not yet produce a court-ready bundle** — evidence plus a signed
-  summary of fingerprints and timestamps — for handing to a lawyer.
+- **An exported bundle is only as safe as where it goes.** Once shared, the
+  receiving person's copy is outside the app entirely. Password protection
+  keeps it unreadable in transit, not after the recipient opens it.
 
 ---
 
@@ -545,9 +592,12 @@ A ten-minute demonstration, in the order that shows the most:
 10. **Enter a wrong PIN twice, then the right one.** A notice says two wrong
     PINs were entered, and when. Open **Settings → Activity log**: the wrong
     PINs, the panic and the unlock are all there, under **Log intact**.
-11. **In the Firebase console**, find the record. It contains only fingerprints
+11. **Export two items for a lawyer.** Note the password, share the bundle to
+    a laptop, open it with 7-Zip, and run `shasum -a 256` on each file — the
+    values match `manifest.pdf` exactly.
+12. **In the Firebase console**, find the record. It contains only fingerprints
     and a date. **Then try to delete it — the server refuses. Try to edit it —
     refused.** Even as the owner of the project.
 
-Step 11 is the one to end on. Every other feature is something a reviewer could
+Step 12 is the one to end on. Every other feature is something a reviewer could
 reasonably take on trust. That one can be watched, live, refusing.

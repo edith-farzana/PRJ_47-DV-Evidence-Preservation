@@ -8,6 +8,7 @@ import 'features/evidence/capture/capture_temp.dart';
 import 'services/audit/audit_log.dart';
 import 'services/crypto/key_manager.dart';
 import 'services/crypto/secure_store.dart';
+import 'services/export/court_exporter.dart';
 import 'services/storage/evidence_storage.dart';
 import 'services/sync/backup_state_store.dart';
 import 'services/sync/evidence_sync.dart';
@@ -38,9 +39,11 @@ Future<void> main() async {
   final store = FlutterSecureStore();
   final keyManager = KeyManager(store);
 
+  final cache = await getTemporaryDirectory();
+
   final storage = EvidenceStorage(
     baseDirectory: await getApplicationDocumentsDirectory(),
-    cacheDirectory: await getTemporaryDirectory(),
+    cacheDirectory: cache,
     keyManager: keyManager,
     store: store,
   );
@@ -74,6 +77,10 @@ Future<void> main() async {
   // a decrypted item was on screen.
   await CaptureTemp.sweep();
   await storage.sweepPreviews();
+
+  // A bundle a killed export left behind, and the copy the share sheet
+  // keeps for the app it was sent to.
+  await CourtExporter.sweep(cache);
 
   runApp(
     SecureEvidenceApp(

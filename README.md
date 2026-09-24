@@ -10,7 +10,7 @@
 
 ## 🚧 Current Status
 
-**This project is under active development — approximately 90% complete.** Everything below is covered by automated tests (182 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
+**This project is under active development — approximately 95% complete.** Everything below is covered by automated tests (207 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
 
 This README describes the **design goals** of Secure Evidence. Sections below marked 🔴 are specified and planned but **not yet implemented**. We are documenting the target architecture openly rather than describing unbuilt features as if they shipped.
 
@@ -22,14 +22,15 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 - ✅ Evidence vault, with playback and on-demand integrity verification — checked against the phone's own records **and** against the server's, which nobody can alter. The decrypted copy is destroyed when the screen closes
 - ✅ Panic (hold anywhere for a second), auto-lock on backgrounding, screenshots and the recents thumbnail blocked
 - ✅ Emergency helpline directory
+- ✅ **Court-export bundle**: chosen evidence plus a PDF manifest of fingerprints, verification results and custody history, and instructions anyone can follow to check it with standard tools. AES-256 password-protected by default; only verified items leave; nothing decrypted is left on the phone
 - ✅ Tamper-evident **activity log**: every unlock, wrong PIN, panic, capture and view, hash-chained so any edit, deletion or rollback shows. Wrong PINs entered while she was away are shown to her at the next unlock — until now they left no trace once the right PIN went in
 - ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore, where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests
 
 **Built, but switched off**
-- 🟡 Per-item opt-in cloud backup of the encrypted files. Firebase Storage needs a billing account we have not added, so the app says so plainly rather than failing. Evidence media has never left the phone
+- 🟡 Per-item opt-in cloud backup of the encrypted files. Firebase Storage needs a billing account we have not added, so the app says so plainly rather than failing. Evidence media leaves the phone only when she exports it
 
 **Not built**
-- 🔴 Court-export bundle and the recovery key that would let a backup be restored to a different phone
+- 🔴 The recovery key, which would make a forgotten PIN recoverable and let a backup be restored to a different phone
 - 🔴 Duress PIN, biometric unlock, and release signing (builds are currently signed with debug keys)
 
 **[`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** walks through every flow in plain language, including what the app does when someone interferes and what it cannot defend against. **[`DEVELOPMENT_CHECKLIST.md`](DEVELOPMENT_CHECKLIST.md)** has the full build plan and history.
@@ -147,7 +148,7 @@ Security through obscurity protects nobody. How the protection works, and an hon
 
 > **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them.
 
-> **Note on what leaves your device:** only each item's cryptographic fingerprint and its encrypted key are recorded in the cloud — enough to prove the evidence existed and has not been altered, and not enough for anyone to view it. **No evidence media has ever left the phone.**
+> **Note on what leaves your device:** only each item's cryptographic fingerprint and its encrypted key are recorded in the cloud — enough to prove the evidence existed and has not been altered, and not enough for anyone to view it. **Evidence media leaves the phone only when she exports it herself**, in a bundle that is password-protected by default.
 >
 > The trade-off is stated plainly in the app: evidence is **provably unaltered**, but does not survive losing the phone. Uploading an encrypted copy is built as a per-item choice but switched off for now. Even once it is on, restoring a backup to a *different* phone needs the recovery key, which is not built yet — until then a backup can only be reopened on the phone that made it.
 
