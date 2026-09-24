@@ -10,28 +10,29 @@
 
 ## 🚧 Current Status
 
-**This project is under active development — approximately 70% complete, with the backend written but not yet verified.**
+**This project is under active development — approximately 80% complete.** Everything below is covered by automated tests (138 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
 
 This README describes the **design goals** of Secure Evidence. Sections below marked 🔴 are specified and planned but **not yet implemented**. We are documenting the target architecture openly rather than describing unbuilt features as if they shipped.
 
 **Working today**
-- ✅ Functional decoy calculator front-end with hidden unlock sequence
+- ✅ Functional decoy calculator front-end with hidden unlock sequence. Installs as **"Calculator"** with a calculator icon, so nothing in the app drawer gives it away
 - ✅ User-chosen PIN and unlock sequence; the PIN unlocks a Keystore-protected master key, with persistent lockout (unit tested)
 - ✅ In-app photo, video and audio capture — nothing is written to the device gallery
 - ✅ Encrypted local evidence store: AES-256-GCM per file, encrypted index with rollback detection, plaintext source destroyed after a verified write
 - ✅ Evidence vault, with playback and on-demand integrity verification; the decrypted copy is destroyed when the screen closes
 - ✅ Panic (hold anywhere for a second), auto-lock on backgrounding, screenshots and the recents thumbnail blocked
 - ✅ Emergency helpline directory
-
-**Written, not yet verified**
 - ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore, where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests
-- 🟡 Per-item opt-in cloud backup of the encrypted files. Built, but **switched off**: Firebase Storage needs a billing account we have not added. The app says so plainly rather than failing. Evidence media has never left the phone
+
+**Built, but switched off**
+- 🟡 Per-item opt-in cloud backup of the encrypted files. Firebase Storage needs a billing account we have not added, so the app says so plainly rather than failing. Evidence media has never left the phone
 
 **Not built**
 - 🔴 Tamper-evident audit log
 - 🔴 Court-export bundle and the recovery key that would let a backup be restored to a different phone
+- 🔴 Duress PIN, biometric unlock, and release signing (builds are currently signed with debug keys)
 
-See **[`DEVELOPMENT_CHECKLIST.md`](DEVELOPMENT_CHECKLIST.md)** for the full build plan and **[`docs/SECURITY.md`](docs/SECURITY.md)** for the security design and threat model.
+**[`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)** walks through every flow in plain language, including what the app does when someone interferes and what it cannot defend against. **[`DEVELOPMENT_CHECKLIST.md`](DEVELOPMENT_CHECKLIST.md)** has the full build plan and history.
 
 ---
 
@@ -58,7 +59,7 @@ The system is designed to help establish that preserved evidence has not been si
 🔴 📋 **Traceability**  
 Evidence-related information and events are structured to support accountability and verification.
 
-🔴 ☁️ **Long-Term Preservation**  
+🟡 ☁️ **Long-Term Preservation**  
 Designed for secure storage, synchronization and resilient evidence preservation.
 
 ✅ 🚨 **Panic Protection**  
@@ -84,10 +85,10 @@ Cryptographic mechanisms are designed to detect unauthorized alteration.
 🔴 **Auditability**  
 Evidence-related actions can be recorded to provide a traceable history.
 
-🟡 **Controlled Access**  
+✅ **Controlled Access**  
 Access to preserved evidence is restricted through authentication and authorization.
 
-🔴 **Preservation Controls**  
+✅ **Preservation Controls**  
 The architecture is designed to reduce unauthorized modification or deletion at the storage and backend layers.
 
 > **The objective is not simply to store evidence — but to preserve its integrity and history.**
@@ -116,7 +117,7 @@ The implementation is intentionally designed so that **the evidence itself remai
 
 ### The design is documented openly — the keys are not.
 
-Security through obscurity protects nobody. The full cryptographic design, key hierarchy and threat model are published in **[`docs/SECURITY.md`](docs/SECURITY.md)**, including an honest account of what this system does *not* defend against. What stays private is the user's keys, which never leave their device — not the design that protects them.
+Security through obscurity protects nobody. How the protection works, and an honest account of what this system does *not* defend against, are written up in **[`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md)**. What stays private is the user's keys, which never leave their device — not the design that protects them.
 
 ---
 
@@ -133,21 +134,35 @@ Security through obscurity protects nobody. The full cryptographic design, key h
 **Security**  
 `AES-256-GCM` · `SHA-256` · `PBKDF2-HMAC-SHA256` · `Envelope Encryption` · `Android Keystore`
 
-### 🟡 Written, not yet verified
-
 **Backend**  
-`Firebase Anonymous Auth` · `Cloud Firestore` · `Firebase Storage` · `Firestore Security Rules`
+`Firebase Anonymous Auth` · `Cloud Firestore` · `Firestore Security Rules`
+
+### 🟡 Built, switched off
+
+**Cloud file backup**  
+`Firebase Storage`
 
 ### 🔴 Planned
 
 **Integrity**  
 `Hash-chained audit log`
 
-> **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them. Rationale is in [`docs/SECURITY.md`](docs/SECURITY.md).
+> **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them.
 
-> **Note on what leaves your device:** evidence **stays on your phone by default**. Only its cryptographic fingerprint and its encrypted key are recorded in the cloud — enough to prove the evidence existed and has not been altered, and not enough for anyone to view it. Uploading a copy of the file itself is a per-item choice you make. See [`docs/SECURITY.md` §3.3](docs/SECURITY.md).
+> **Note on what leaves your device:** only each item's cryptographic fingerprint and its encrypted key are recorded in the cloud — enough to prove the evidence existed and has not been altered, and not enough for anyone to view it. **No evidence media has ever left the phone.**
 >
-> The trade-off is stated plainly in the app: an item kept only on your phone is **provably unaltered**, but does not survive losing the phone. An item you back up survives both.
+> The trade-off is stated plainly in the app: evidence is **provably unaltered**, but does not survive losing the phone. Uploading an encrypted copy is built as a per-item choice but switched off for now. Even once it is on, restoring a backup to a *different* phone needs the recovery key, which is not built yet — until then a backup can only be reopened on the phone that made it.
+
+
+### Building it yourself
+
+The Firebase project's configuration files — `android/app/google-services.json` and `lib/firebase_options.dart` — are deliberately **not** in this repository. A fresh clone therefore needs them generated before it will build:
+
+```bash
+flutterfire configure
+```
+
+Choose the Firebase project and **Android** only. Then `flutter build apk`. Without that step the Android build stops at the Google Services plugin.
 
 ---
 

@@ -66,7 +66,7 @@ class EncryptionResult {
 
 /// Envelope encryption for evidence files.
 ///
-/// Key hierarchy (see docs/SECURITY.md):
+/// Key hierarchy:
 ///
 ///   PIN -> PBKDF2 -> PIN-derived key -> master key (KEK) -> per-file DEK
 ///

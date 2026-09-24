@@ -37,7 +37,7 @@ class UnlockResult {
   bool get isSuccess => status == UnlockStatus.success;
 }
 
-/// Owns the top of the key hierarchy (docs/SECURITY.md §2.2):
+/// Owns the top of the key hierarchy:
 ///
 ///   PIN -> PBKDF2 -> PIN-derived key -> master key (KEK)
 ///
@@ -340,7 +340,7 @@ class KeyManager {
   /// freeze the PIN screen for the duration.
   ///
   /// Limitation: byte copies made while passing data between isolates
-  /// cannot be zeroed. See docs/SECURITY.md §5.
+  /// cannot be zeroed; Dart offers no control over them.
   static Future<SecretKeyData> _derive(
     String pin,
     List<int> salt,

@@ -12,8 +12,8 @@ This document explains everything the app does, step by step, without assuming
 any technical background. Where a technical term is unavoidable it is explained
 the first time it appears, and there is a glossary at the end.
 
-If you want the code-level detail instead, `docs/SECURITY.md` has the
-cryptographic design and `DEVELOPMENT_CHECKLIST.md` has the build history.
+If you want the task-level detail and build history instead,
+`DEVELOPMENT_CHECKLIST.md` has it.
 
 ---
 
