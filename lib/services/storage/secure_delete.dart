@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 /// Best effort: overwrite [file] with zeros, then delete it.
 ///
 /// Flash wear levelling means the old blocks may survive the
-/// overwrite (docs/SECURITY.md §5). Never throws: failures are logged,
+/// overwrite. Never throws: failures are logged,
 /// because every caller is cleaning up after the fact and has nothing
 /// better to do with the error.
 Future<void> destroyPlaintext(File file) async {

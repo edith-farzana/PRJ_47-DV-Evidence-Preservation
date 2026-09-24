@@ -18,7 +18,7 @@ abstract class SecureStore {
 /// On Android, flutter_secure_storage encrypts every value with an AES
 /// key that is itself wrapped by a non-exportable RSA key in the
 /// Android Keystore. That is the second layer around the PIN-wrapped
-/// master key (docs/SECURITY.md §2.2): a copy of the app's files is
+/// master key: a copy of the app's files is
 /// useless without this specific phone's Keystore, so the 10,000
 /// possible PINs cannot be tried offline against a backup or a
 /// forensic image.

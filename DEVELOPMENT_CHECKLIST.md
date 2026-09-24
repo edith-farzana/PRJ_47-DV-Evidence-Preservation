@@ -1,7 +1,7 @@
 # Secure Evidence — Development Checklist
 
-**Branch for this work:** `feature/p4-safety-fixes`
-**Last updated:** 2026-09-23
+**Branch for this work:** `feature/icon-and-docs-cleanup` (P4 and P5 merged to `main` in PR #4)
+**Last updated:** 2026-09-24
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
 
@@ -79,7 +79,7 @@ No feature code in this phase. Deliberate: we agree the map before anyone drives
 
 - [x] Create branch `feature/security-layer` off `main`
 - [x] Write `DEVELOPMENT_CHECKLIST.md` (this file)
-- [x] Write `docs/SECURITY.md` — algorithms, key hierarchy, threat model, and an explicit list of what is **not** protected
+- [x] Write `docs/SECURITY.md` — algorithms, key hierarchy, threat model, and an explicit list of what is **not** protected *(removed 2026-09-24; the threat scenarios and limitations are covered in plain language in `docs/HOW_IT_WORKS.md`)*
 - [x] Correct `README.md` — status markers throughout, "Current Status" section, Technology split into in-use vs planned
 - [ ] Teammate reads the checklist and agrees the phase split
 - [x] Install Flutter SDK on Akash's machine (Flutter 3.47.4 / Dart 3.13.3, installed by 2026-09-18)
@@ -161,7 +161,7 @@ Replaces the hardcoded `2580`. This is where the app stops being a mockup.
 > **Decision (2026-09-18):** keep the 4-digit PIN, and bind the PIN-wrapped
 > master key to the Android Keystore (option 1) rather than moving to longer
 > PINs. 10,000 PINs are only guessable on the device itself, where the lockout
-> applies. Rationale and the root-on-device limit are in `docs/SECURITY.md` §2.2.
+> applies. The root-on-device limit is covered in `docs/HOW_IT_WORKS.md`.
 
 ### Implementation — `lib/services/crypto/key_manager.dart` (new)
 - [x] **Master key (KEK):** random 256 bits, generated once at first run
@@ -179,7 +179,7 @@ Replaces the hardcoded `2580`. This is where the app stops being a mockup.
 - [x] Failed-attempt lockout: 4 free, then 30s → 1m → 2m → 5m → 15m → 1h; persisted, survives restart; attempt counted before the KDF runs. **No wipe after N failures**, on purpose
 - [x] `lib/features/calculator/presentation/calculator_page.dart` — `_developmentSecret` removed; the sequence is user-chosen (`lib/features/auth/domain/unlock_sequence.dart`) and stored in secure storage
 - [x] `lib/features/home/home_page.dart` + `change_pin_page.dart` (new) — "Change PIN" re-wraps the master key under a new PIN and salt, **without** re-encrypting any evidence; wrong current PIN counts toward the lockout
-- [x] Documented in `docs/SECURITY.md`: Keystore layer and its limit (§2.2), lockout (§4.2), clock and isolate-copy limits (§5)
+- [x] Documented in `docs/SECURITY.md` (since removed): Keystore layer and its limit, lockout, clock and isolate-copy limits
 
 ### Tests — `test/services/key_manager_test.dart` (new, 19 cases) + widget and sequence tests
 - [x] Correct PIN unwraps the master key, and that key decrypts a file made by `CryptoService`
@@ -210,7 +210,7 @@ Makes "read-only" and "encrypted at rest" true locally.
 ### Implementation
 - [x] `lib/services/storage/evidence_storage.dart` — `addEvidence()` routes through `CryptoService`; blobs are `evidence/<uuid>.enc` with no extension
 - [x] Order: encrypt → **decrypt and re-hash to verify** → index → destroy source. The source is kept, and the partial blob removed, if any step before the last fails
-- [x] **Plaintext source overwritten with zeros, then deleted**, after the verified write (best effort on flash; SECURITY.md §5)
+- [x] **Plaintext source overwritten with zeros, then deleted**, after the verified write (best effort on flash: wear levelling means old blocks may survive)
 - [x] `lib/services/storage/evidence_index.dart` (new) — AES-256-GCM `index.enc`, key derived from the master key with HKDF, atomic temp-and-rename writes, serialized appends
 - [x] **Rollback detection** in place of a "running hash": GCM already catches edits, so the seal (count + SHA-256 of `index.enc`, in Keystore-backed storage) catches an older genuine copy being put back. Crash-safe via a pending hash
 - [x] Keep the append-only discipline: still no `deleteEvidence()` / `updateEvidence()`
@@ -321,8 +321,8 @@ Where "secure read-only database" stops being a claim and becomes something we c
 >
 > Also done in this pass: `applicationId` and `namespace` moved to
 > `com.pocketcalc.calculator` and the launcher label to "Calculator", so
-> the app drawer no longer announces what this is. The launcher icon is
-> still Flutter's default.
+> the app drawer no longer announces what this is. A calculator launcher
+> icon followed on 2026-09-23, set up as an Android adaptive icon.
 
 ### Setup
 - [ ] `flutterfire configure` → generates `lib/firebase_options.dart` and `android/app/google-services.json`
@@ -345,7 +345,7 @@ Where "secure read-only database" stops being a claim and becomes something we c
 > The stated reason was privacy — not wanting to hold survivor media.
 > Note for the record that client-side encryption already solved that:
 > Firebase only ever receives ciphertext we cannot decrypt (adversary
-> A6 in `docs/SECURITY.md`). The real justification for opt-in is
+> A6: a breached or curious backend operator). The real justification for opt-in is
 > **survivor control over what leaves their device**, which is worth
 > having in a DV app regardless of what the crypto guarantees.
 
@@ -442,7 +442,7 @@ Where "secure read-only database" stops being a claim and becomes something we c
 - [ ] `flutter analyze` clean across the whole project
 - [ ] CI running `flutter analyze` + `flutter test` on push
 - [ ] Release signing config (currently signing with debug keys — see the TODO in `android/app/build.gradle.kts`)
-- [ ] Final `docs/SECURITY.md` and architecture diagram for the report
+- [ ] Final security write-up and architecture diagram for the report
 
 ---
 
