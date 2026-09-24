@@ -197,6 +197,10 @@ class _EntryTile extends StatelessWidget {
           'verifiedOnThisPhone' => 'verified on this phone',
           _ => 'NOT verified',
         },
+      if (entry.detail['items'] is List)
+        '${(entry.detail['items'] as List).length} item'
+            '${(entry.detail['items'] as List).length == 1 ? '' : 's'}'
+            '${entry.detail['protected'] == true ? ', password-protected' : ', NOT password-protected'}',
       if ((entry.detail['priorFailedAttempts'] as int? ?? 0) > 0)
         'after ${entry.detail['priorFailedAttempts']} wrong PIN'
             '${entry.detail['priorFailedAttempts'] == 1 ? '' : 's'}',
@@ -219,6 +223,7 @@ class _EntryTile extends StatelessWidget {
       AuditEventType.verified => (Icons.verified_outlined, _good),
       AuditEventType.recordedOnServer => (Icons.cloud_done_outlined, _good),
       AuditEventType.pinChanged => (Icons.password_outlined, _accent),
+      AuditEventType.exported => (Icons.ios_share, _warn),
       null => (Icons.help_outline, _muted),
     };
 

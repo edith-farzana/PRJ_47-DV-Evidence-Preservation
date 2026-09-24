@@ -1,6 +1,6 @@
 # Secure Evidence — Development Checklist
 
-**Branch for this work:** `feature/p6-audit-log`, stacked on `feature/server-cross-check` (PR #6)
+**Branch for this work:** `feature/court-export`. `master` is frozen at the ~80% review (tag `review-80-percent`)
 **Last updated:** 2026-09-24
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
@@ -430,14 +430,14 @@ Where "secure read-only database" stops being a claim and becomes something we c
 
 ---
 
-## P7 — Integrity verification & court export · 13% *(after review)*
+## P7 — Integrity verification & court export · 13%
 
-- [ ] Evidence detail screen with photo/video/audio playback from decrypted temp
-- [ ] "Verify integrity" action — re-hash and compare against stored `plaintextSha256`, show pass/fail
-- [ ] Integrity badge in the vault list (replacing the current hardcoded "STORED" label)
-- [ ] Court-export bundle: decrypted evidence + PDF manifest of hashes, timestamps and chain of custody
+- [x] Evidence detail screen with photo/video/audio playback from decrypted temp
+- [x] "Verify integrity" action — re-hash and compare against stored `plaintextSha256`, show pass/fail — plus a cross-check against the server record
+- [x] Integrity badge in the vault list (replacing the current hardcoded "STORED" label)
+- [x] Court-export bundle: decrypted evidence + PDF manifest of hashes, timestamps and chain of custody (`lib/services/export/`). AES-256 ZIP with a generated password by default; only verified items; neutral names; no key material; export recorded in the activity log; independent verification with `certutil` / `shasum`
 - [ ] One-time printable **recovery key** so a forgotten PIN is not permanent data loss
-- [ ] Tests: verification detects a modified blob; export manifest hashes match the stored ones
+- [x] Tests: verification detects a modified blob; export manifest hashes match the stored ones — and the exported files hash to what the shipped manifest says, a tampered item is left out, nothing decrypted remains, a panic mid-export leaves nothing behind
 
 ---
 
@@ -474,12 +474,12 @@ Update this after every gate.
 | P4 Safety fixes | 9% | ✅ Built, device check pending | 108/108 tests green; manual device pass (DCIM check) outstanding |
 | P5 Firebase + rules | 13% | ✅ Built and verified, minus Storage | 138 Dart tests green, 15 rules tests green, Firestore rules deployed. Blob upload and receipts deferred: Storage needs billing |
 | P6 Audit log | 10% | ✅ Built, device check pending | Hash-chained, sealed, encrypted; wrong-PIN notice; activity-log screen. 27 new tests, 182 total. Server anchoring outstanding |
-| P7 Verification & export | 13% | 🟡 Part done early | Evidence viewing, playback and on-demand integrity verification built, including a cross-check against the server record (28 tests). Court export and recovery key outstanding |
+| P7 Verification & export | 13% | ✅ Built except the recovery key | Viewing, verification with server cross-check, and the court-export bundle. 207 tests total. Recovery key outstanding |
 | P8 Offline sync | 9% | Not started | — |
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~90%** — baseline + P0 (~3%) + P1 (14%) + P2 (11%) + P3 (9%) + P4 (9%) + most of P5 (~10% of 13%, held back by Storage) + P6 (10%), plus part of P7 brought forward (viewing and verification). P2-P6 still pending their on-device checks
+**Current: ~95%** — baseline + P0-P4 + most of P5 (held back by Storage) + P6 + P7 except the recovery key. P2-P7 still pending their on-device checks
 **Review target: 65%**
 
 ---

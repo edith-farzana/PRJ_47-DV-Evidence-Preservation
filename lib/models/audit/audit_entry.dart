@@ -30,6 +30,10 @@ enum AuditEventType {
   recordedOnServer,
 
   pinChanged,
+
+  /// Evidence left the app in an export bundle. Part of the chain of
+  /// custody: the entry names every item that went out.
+  exported,
 }
 
 extension AuditEventTypeLabel on AuditEventType {
@@ -53,6 +57,8 @@ extension AuditEventTypeLabel on AuditEventType {
         return 'Fingerprint recorded on server';
       case AuditEventType.pinChanged:
         return 'PIN changed';
+      case AuditEventType.exported:
+        return 'Exported';
     }
   }
 }
