@@ -32,7 +32,22 @@ class UnlockResult {
   /// Set when further attempts are refused until this moment.
   final DateTime? lockedUntil;
 
-  const UnlockResult._(this.status, this.failedAttempts, this.lockedUntil);
+  /// On success: how many wrong PINs came before this one. The counter is
+  /// reset the moment the right PIN goes in, so this is the last chance to
+  /// know that someone tried.
+  final int priorFailedAttempts;
+
+  /// On success: when those wrong PINs were entered, oldest first. Best
+  /// effort -- [priorFailedAttempts] is the number to trust.
+  final List<DateTime> priorFailureTimes;
+
+  const UnlockResult._(
+    this.status,
+    this.failedAttempts,
+    this.lockedUntil, {
+    this.priorFailedAttempts = 0,
+    this.priorFailureTimes = const [],
+  });
 
   bool get isSuccess => status == UnlockStatus.success;
 }
@@ -93,6 +108,10 @@ class KeyManager {
   static const String _unlockSequenceKey = 'km.v1.unlockSequence';
   static const String _failedAttemptsKey = 'km.v1.failedAttempts';
   static const String _lockedUntilKey = 'km.v1.lockedUntil';
+  static const String _failureTimesKey = 'km.v1.failureTimes';
+
+  /// Most recent wrong-PIN times kept. The counter itself is unbounded.
+  static const int maxFailureTimes = 50;
 
   final SecureStore _store;
   final int _kdfIterations;
@@ -225,14 +244,27 @@ class KeyManager {
     }
 
     // Count the attempt BEFORE the slow KDF runs. Otherwise killing the
-    // app mid-derivation would be a free guess.
+    // app mid-derivation would be a free guess. Its time goes down with
+    // it, so the activity log hears about a force-quit guess too.
+    final priorTimes = await _failureTimes();
+
     await _store.write(_failedAttemptsKey, '${failures + 1}');
+    await _writeFailureTimes([...priorTimes, _now()]);
 
     final masterKey = await _unwrapWithPin(pin);
 
     if (masterKey != null) {
       await _resetFailures();
-      return (masterKey, const UnlockResult._(UnlockStatus.success, 0, null));
+      return (
+        masterKey,
+        UnlockResult._(
+          UnlockStatus.success,
+          0,
+          null,
+          priorFailedAttempts: failures,
+          priorFailureTimes: priorTimes,
+        ),
+      );
     }
 
     final total = failures + 1;
@@ -258,6 +290,33 @@ class KeyManager {
   Future<void> _resetFailures() async {
     await _store.delete(_failedAttemptsKey);
     await _store.delete(_lockedUntilKey);
+    await _store.delete(_failureTimesKey);
+  }
+
+  Future<List<DateTime>> _failureTimes() async {
+    final raw = await _store.read(_failureTimesKey);
+    if (raw == null) return [];
+
+    try {
+      return (jsonDecode(raw) as List<dynamic>)
+          .map((value) => DateTime.parse(value as String))
+          .toList();
+    } catch (_) {
+      // Only the times are lost; the counter, which is what the lockout
+      // uses, lives under its own key.
+      return [];
+    }
+  }
+
+  Future<void> _writeFailureTimes(List<DateTime> times) {
+    final kept = times.length > maxFailureTimes
+        ? times.sublist(times.length - maxFailureTimes)
+        : times;
+
+    return _store.write(
+      _failureTimesKey,
+      jsonEncode(kept.map((time) => time.toUtc().toIso8601String()).toList()),
+    );
   }
 
   Future<String> _wrapUnderPin(SecretKeyData masterKey, String pin) async {

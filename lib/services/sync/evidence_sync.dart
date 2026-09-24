@@ -63,10 +63,12 @@ class EvidenceSync extends ChangeNotifier {
   /// capture may happen with no signal, and this way the record catches
   /// up by itself. A failure here is not shown to the user -- being
   /// offline is ordinary, and the evidence is already safe on the phone.
-  Future<void> syncPendingMetadata(List<EvidenceItem> items) async {
-    if (!_client.isConfigured) return;
+  ///
+  /// Returns the ids whose record reached the server on this call.
+  Future<List<String>> syncPendingMetadata(List<EvidenceItem> items) async {
+    if (!_client.isConfigured) return const [];
 
-    var changed = false;
+    final recorded = <String>[];
 
     for (final item in items) {
       final record = _states.recordFor(item.id);
@@ -78,13 +80,15 @@ class EvidenceSync extends ChangeNotifier {
 
         await _states.save(item.id, record.copyWith(metadataSynced: true));
 
-        changed = true;
+        recorded.add(item.id);
       } catch (error) {
         debugPrint('Metadata for ${item.id} not recorded yet: $error');
       }
     }
 
-    if (changed) notifyListeners();
+    if (recorded.isNotEmpty) notifyListeners();
+
+    return recorded;
   }
 
   /// Uploads the encrypted blob for [item], then writes its receipt.

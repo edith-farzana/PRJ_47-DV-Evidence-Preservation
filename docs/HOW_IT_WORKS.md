@@ -174,6 +174,13 @@ Three details matter here:
 - **The app never erases the evidence after repeated wrong PINs.** Many secure
   apps do. Here it would be a gift to an abuser: he could destroy everything
   just by typing wrong PINs at her phone. Locking him out is enough.
+- **She is told.** The moment the right PIN goes in, the count of wrong ones
+  resets — so without anything more, three wrong guesses made while she was
+  away would leave no trace at all. Instead, each one is recorded as it
+  happens, and the next time she opens the app she sees a short notice: how
+  many wrong PINs, and when. It allows for her own typos ("if that wasn't
+  you…"), because the aim is that she knows, not that she is alarmed by a
+  false alarm.
 
 ### Capturing evidence
 
@@ -312,6 +319,34 @@ altered on the phone would be sent to the server as though it were the
 original, and the check would end up vouching for exactly what it exists to
 catch.
 
+### The activity log
+
+The app keeps a record of what happens in it: every time it is opened, every
+wrong PIN, every panic, every capture, every time evidence is viewed or
+verified, and every PIN change. It is in **Settings → Activity log**.
+
+It records **what** happened and **when** — never filenames, never content.
+It is a record of her behaviour, so like everything else it is encrypted, and
+it stays on the phone.
+
+What makes it more than a list is that it is **tamper-evident**. Each entry
+carries the fingerprint of the entry before it, so the entries form a chain:
+
+- **Change any entry** and its fingerprint no longer matches — and neither does
+  the link from the entry after it.
+- **Delete an entry** and the chain has a gap, and the numbering jumps.
+- **Cut entries off the end**, or put back an older copy of the whole log, and
+  the result no longer matches a seal kept in the phone's hardware security
+  chip.
+
+The log screen checks all of this every time it opens, and says so at the top:
+**Log intact**, or exactly which entry the break is at. Anything from that point
+on is marked as not trustworthy.
+
+Wrong PINs and panics happen while the app is locked, when the key to write the
+log is not available. They are held securely and added to the log, in the
+right order, the next time she unlocks — so they are not lost.
+
 ### Panic
 
 **Hold a finger anywhere on the screen for one second.** From any screen, over
@@ -389,6 +424,17 @@ He finds an app called Calculator, and a folder of files with meaningless names
 that will not open in anything. He cannot tell whether they are evidence,
 app data, or nothing.
 
+**What if he tries to guess her PIN while she is away?**
+Four guesses are free, then each wrong one makes him wait longer, up to an hour.
+He cannot wipe anything by guessing. And the next time she opens the app, she
+is told how many wrong PINs were entered and when — even though the lockout
+itself has long since reset.
+
+**What if he opens the app, looks around, and closes it again?**
+If he knows the PIN, the activity log shows the visit: when it was opened, what
+was viewed. He cannot remove those entries without the log saying, at the top,
+that it has been tampered with.
+
 **What if he forces her to unlock it?**
 Then he sees the evidence. Technology has limits here, and it is important to
 say so rather than imply otherwise. The planned defence is a **duress PIN** — a
@@ -449,8 +495,12 @@ A system that claims no weaknesses is not credible. The honest list:
   for.
 - **It cannot help if the user is forced to unlock it** — until the duress PIN
   is built.
-- **It does not yet keep a history** of who opened what and when. A
-  tamper-evident audit log is the next major feature.
+- **The activity log can be rebuilt by someone with complete control of the
+  phone.** With the PIN *and* root access, it is possible to rewrite the log
+  and its seal together. Keeping a copy of each entry's fingerprint on the
+  server, like the evidence fingerprints, would close this; it is the natural
+  next step. The log's times also come from the phone's clock, which can be
+  changed.
 - **It does not yet produce a court-ready bundle** — evidence plus a signed
   summary of fingerprints and timestamps — for handing to a lawyer.
 
@@ -470,6 +520,7 @@ A system that claims no weaknesses is not credible. The honest list:
 | **Security rules** | Instructions on the server saying who may do what. Ours forbid changing or deleting a record |
 | **Anonymous sign-in** | Each phone gets an ID with no email or phone number attached |
 | **Metadata** | Information *about* a file — its size, date, fingerprint — rather than its contents |
+| **Hash chain** | A list where each entry includes the fingerprint of the one before it, so changing or removing any entry breaks every link after it |
 
 ---
 
@@ -491,9 +542,12 @@ A ten-minute demonstration, in the order that shows the most:
    one fetched from the server.
 9. **Hold the screen for one second.** Instant calculator. Press Back — it does
    not return. Getting in needs the PIN again.
-10. **In the Firebase console**, find the record. It contains only fingerprints
+10. **Enter a wrong PIN twice, then the right one.** A notice says two wrong
+    PINs were entered, and when. Open **Settings → Activity log**: the wrong
+    PINs, the panic and the unlock are all there, under **Log intact**.
+11. **In the Firebase console**, find the record. It contains only fingerprints
     and a date. **Then try to delete it — the server refuses. Try to edit it —
     refused.** Even as the owner of the project.
 
-Step 10 is the one to end on. Every other feature is something a reviewer could
+Step 11 is the one to end on. Every other feature is something a reviewer could
 reasonably take on trust. That one can be watched, live, refusing.

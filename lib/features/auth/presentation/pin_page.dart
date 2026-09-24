@@ -7,7 +7,10 @@ import '../domain/pin_validator.dart';
 
 class PinPage extends StatefulWidget {
   final KeyManager keyManager;
-  final VoidCallback onSuccess;
+
+  /// Receives the result, which carries the wrong PINs entered before
+  /// this one -- the key manager has just reset its count of them.
+  final ValueChanged<UnlockResult> onSuccess;
 
   const PinPage({super.key, required this.keyManager, required this.onSuccess});
 
@@ -115,7 +118,7 @@ class _PinPageState extends State<PinPage> {
     switch (result.status) {
       case UnlockStatus.success:
         FocusScope.of(context).unfocus();
-        widget.onSuccess();
+        widget.onSuccess(result);
       case UnlockStatus.wrongPin:
         final left = KeyManager.freeAttempts - result.failedAttempts;
         setState(() {

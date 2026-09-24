@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../../../app/app_scope.dart';
 
 import '../../../services/crypto/key_manager.dart';
 import '../domain/pin_validator.dart';
@@ -68,6 +72,9 @@ class _ChangePinPageState extends State<ChangePinPage> {
 
     switch (result.status) {
       case UnlockStatus.success:
+        // The key manager has just reset its count of wrong current-PIN
+        // attempts made on this screen; the activity log keeps them.
+        unawaited(AppScope.of(context).audit.onPinChanged(result));
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('PIN changed.')));
         Navigator.of(context).pop();

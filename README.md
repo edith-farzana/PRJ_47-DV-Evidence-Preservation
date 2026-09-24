@@ -10,7 +10,7 @@
 
 ## 🚧 Current Status
 
-**This project is under active development — approximately 80% complete.** Everything below is covered by automated tests (138 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
+**This project is under active development — approximately 90% complete.** Everything below is covered by automated tests (182 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
 
 This README describes the **design goals** of Secure Evidence. Sections below marked 🔴 are specified and planned but **not yet implemented**. We are documenting the target architecture openly rather than describing unbuilt features as if they shipped.
 
@@ -22,13 +22,13 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 - ✅ Evidence vault, with playback and on-demand integrity verification — checked against the phone's own records **and** against the server's, which nobody can alter. The decrypted copy is destroyed when the screen closes
 - ✅ Panic (hold anywhere for a second), auto-lock on backgrounding, screenshots and the recents thumbnail blocked
 - ✅ Emergency helpline directory
+- ✅ Tamper-evident **activity log**: every unlock, wrong PIN, panic, capture and view, hash-chained so any edit, deletion or rollback shows. Wrong PINs entered while she was away are shown to her at the next unlock — until now they left no trace once the right PIN went in
 - ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore, where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests
 
 **Built, but switched off**
 - 🟡 Per-item opt-in cloud backup of the encrypted files. Firebase Storage needs a billing account we have not added, so the app says so plainly rather than failing. Evidence media has never left the phone
 
 **Not built**
-- 🔴 Tamper-evident audit log
 - 🔴 Court-export bundle and the recovery key that would let a backup be restored to a different phone
 - 🔴 Duress PIN, biometric unlock, and release signing (builds are currently signed with debug keys)
 
@@ -56,7 +56,7 @@ Evidence is protected through a purpose-built encryption and integrity architect
 ✅ 🧬 **Evidence Integrity**  
 The system is designed to help establish that preserved evidence has not been silently altered.
 
-🔴 📋 **Traceability**  
+✅ 📋 **Traceability**  
 Evidence-related information and events are structured to support accountability and verification.
 
 🟡 ☁️ **Long-Term Preservation**  
@@ -82,7 +82,7 @@ Relevant evidence information is preserved alongside the captured material.
 ✅ **Integrity Verification**  
 Cryptographic mechanisms are designed to detect unauthorized alteration.
 
-🔴 **Auditability**  
+✅ **Auditability**  
 Evidence-related actions can be recorded to provide a traceable history.
 
 ✅ **Controlled Access**  
@@ -142,10 +142,8 @@ Security through obscurity protects nobody. How the protection works, and an hon
 **Cloud file backup**  
 `Firebase Storage`
 
-### 🔴 Planned
-
 **Integrity**  
-`Hash-chained audit log`
+`Hash-chained activity log` · `Keystore-sealed rollback detection`
 
 > **Note on the backend:** earlier drafts of this README described a custom `REST API` + `JWT` + `PostgreSQL` stack. We have since settled on **Firebase**, primarily because Firestore Security Rules let us enforce append-only, no-delete guarantees *server-side* — the client cannot opt out of them.
 

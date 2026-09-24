@@ -1,6 +1,6 @@
 # Secure Evidence — Development Checklist
 
-**Branch for this work:** `feature/server-cross-check` (P4 and P5 merged to `main` in PRs #4 and #5)
+**Branch for this work:** `feature/p6-audit-log`, stacked on `feature/server-cross-check` (PR #6)
 **Last updated:** 2026-09-24
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
@@ -396,20 +396,35 @@ Where "secure read-only database" stops being a claim and becomes something we c
 
 ---
 
-## P6 — Tamper-evident audit log · 10% *(start only before review)*
+## P6 — Tamper-evident audit log · 10%
+
+> ✅ **Built 2026-09-24** on `feature/p6-audit-log`, stacked on the
+> server cross-check (PR #6), which must merge first.
+>
+> **Found while building it:** the correct PIN resets the failed-attempt
+> counter, so wrong guesses made while she was away left no trace once she
+> unlocked. The key manager now records each wrong PIN's time alongside the
+> counter — before the slow derivation, so a force-quit guess is kept too —
+> and hands them back on success. She is shown a notice at the next unlock.
 
 ### Implementation — `lib/services/audit/audit_log.dart` (new)
-- [ ] Append-only, **hash-chained**: each entry stores SHA-256 of the previous entry
-- [ ] Events: unlock, failed unlock, capture, upload, view, panic, PIN change
-- [ ] `verifyChain()` walks the log and reports the first break
-- [ ] Write to `/users/{uid}/audit/{eventId}` under the same create-only rules *(after review)*
-- [ ] Audit-viewer UI *(after review)*
+- [x] Append-only, **hash-chained**: each entry stores SHA-256 of the previous entry
+- [x] Events: unlock, failed unlock, capture, fingerprint recorded on server, view, verify, panic, auto-lock, PIN change
+- [x] `verify()` walks the log and reports the first break, and why
+- [x] Sealed like the evidence index, so cutting entries off the end or restoring an older copy is caught — the attack a chain alone misses. The sealed-file mechanism was extracted from `evidence_index.dart` into `sealed_file.dart`; the index tests pass unedited
+- [x] Events that happen while locked (wrong PINs, panic, auto-lock) are held in Keystore-backed storage and folded in at the next unlock. Panic still destroys the key first
+- [x] Activity-log screen in Settings, with the chain's status at the top
+- [x] Wrong-PIN notice after unlock
+- [ ] Write each entry's hash to `/users/{uid}/audit/{eventId}` under create-only rules — closes the phone + PIN + root case
 
 ### Tests
-- [ ] Chain verifies over a clean log
-- [ ] Altering any middle entry fails verification
-- [ ] Deleting an entry fails verification
-- [ ] The first entry anchors correctly
+- [x] Chain verifies over a clean log
+- [x] Altering any middle entry fails verification, at that entry
+- [x] Deleting an entry fails verification
+- [x] The first entry anchors correctly
+- [x] Cutting entries off the end, restoring an older copy, and a corrupted file are all caught
+- [x] Wrong-PIN times come back with a success, then clear; a force-quit guess is included
+- [x] A panic in the middle of an unlock loses nothing
 
 **Gate:** local chain + verification working, tests green.
 
@@ -458,13 +473,13 @@ Update this after every gate.
 | P3 Storage hardening | 9% | ✅ Built, device check pending | 85/85 tests green, APK builds; manual device pass outstanding |
 | P4 Safety fixes | 9% | ✅ Built, device check pending | 108/108 tests green; manual device pass (DCIM check) outstanding |
 | P5 Firebase + rules | 13% | ✅ Built and verified, minus Storage | 138 Dart tests green, 15 rules tests green, Firestore rules deployed. Blob upload and receipts deferred: Storage needs billing |
-| P6 Audit log | 10% | Not started | — |
+| P6 Audit log | 10% | ✅ Built, device check pending | Hash-chained, sealed, encrypted; wrong-PIN notice; activity-log screen. 27 new tests, 182 total. Server anchoring outstanding |
 | P7 Verification & export | 13% | 🟡 Part done early | Evidence viewing, playback and on-demand integrity verification built, including a cross-check against the server record (28 tests). Court export and recovery key outstanding |
 | P8 Offline sync | 9% | Not started | — |
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)
-**Current: ~80%** — baseline + P0 (~3%) + P1 (14%) + P2 (11%) + P3 (9%) + P4 (9%) + most of P5 (~10% of 13%, held back by Storage), plus part of P7 brought forward (viewing and verification). P2-P4 still pending their on-device checks
+**Current: ~90%** — baseline + P0 (~3%) + P1 (14%) + P2 (11%) + P3 (9%) + P4 (9%) + most of P5 (~10% of 13%, held back by Storage) + P6 (10%), plus part of P7 brought forward (viewing and verification). P2-P6 still pending their on-device checks
 **Review target: 65%**
 
 ---

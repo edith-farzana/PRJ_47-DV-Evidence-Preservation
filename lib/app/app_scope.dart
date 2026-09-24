@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../services/audit/audit_log.dart';
 import '../services/crypto/key_manager.dart';
 import '../services/storage/evidence_storage.dart';
 import '../services/sync/evidence_sync.dart';
@@ -15,6 +16,7 @@ class AppScope extends InheritedWidget {
     required this.storage,
     required this.lockController,
     required this.sync,
+    required this.audit,
     required super.child,
   });
 
@@ -22,6 +24,7 @@ class AppScope extends InheritedWidget {
   final EvidenceStorage storage;
   final AppLockController lockController;
   final EvidenceSync sync;
+  final AuditLog audit;
 
   static AppScope of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
@@ -36,5 +39,6 @@ class AppScope extends InheritedWidget {
       keyManager != oldWidget.keyManager ||
       storage != oldWidget.storage ||
       lockController != oldWidget.lockController ||
-      sync != oldWidget.sync;
+      sync != oldWidget.sync ||
+      audit != oldWidget.audit;
 }
