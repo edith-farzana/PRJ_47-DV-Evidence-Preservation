@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secure_evidence_app/models/evidence/backup_state.dart';
 import 'package:secure_evidence_app/models/evidence/evidence_item.dart';
+import 'package:secure_evidence_app/models/evidence/server_check.dart';
 import 'package:secure_evidence_app/services/sync/backup_state_store.dart';
 import 'package:secure_evidence_app/services/sync/evidence_sync.dart';
 import 'package:secure_evidence_app/services/sync/evidence_sync_client.dart';
@@ -61,6 +62,30 @@ class _FakeClient implements EvidenceSyncClient {
 
   @override
   Future<Set<String>> backedUpIds() async => remoteReceipts;
+
+  /// What the server holds, by evidence id. Absent means no record.
+  final Map<String, Map<String, Object?>> serverRecords = {};
+
+  bool serverUnreachable = false;
+
+  @override
+  Future<Map<String, Object?>?> fetchMetadata(String evidenceId) async {
+    calls.add('fetch:$evidenceId');
+
+    if (serverUnreachable) {
+      throw const SyncUnavailableException('there is no internet connection.');
+    }
+
+    return serverRecords[evidenceId];
+  }
+}
+
+/// A client whose read fails in a way nobody planned for.
+class _BrokenFetchClient extends _FakeClient {
+  @override
+  Future<Map<String, Object?>?> fetchMetadata(String evidenceId) async {
+    throw StateError('unexpected');
+  }
 }
 
 void main() {
@@ -309,6 +334,130 @@ void main() {
 
       expect(client.metadataWrites, ['one', 'two']);
       expect(client.blobUploads, isEmpty);
+    });
+  });
+
+  group('cross-checking against the server record', () {
+    /// The record as this phone uploaded it, optionally with one field
+    /// changed -- standing in for a local record that was altered after
+    /// the server copy was made.
+    Map<String, Object?> recordFor(
+      EvidenceItem item, {
+      Map<String, Object?> altered = const {},
+    }) => {...metadataPayload(item), ...altered};
+
+    test('matches when the server holds what was uploaded', () async {
+      final item = await makeItem('one');
+      client.serverRecords['one'] = recordFor(item);
+
+      final check = await sync.checkServerRecord(item);
+
+      expect(check.status, ServerCheckStatus.matches);
+      expect(check.serverPlaintextSha256, item.plaintextSha256);
+    });
+
+    test('a different evidence fingerprint is a mismatch', () async {
+      final item = await makeItem('one');
+      client.serverRecords['one'] = recordFor(
+        item,
+        altered: {'plaintextSha256': 'c' * 64},
+      );
+
+      final check = await sync.checkServerRecord(item);
+
+      expect(check.status, ServerCheckStatus.mismatch);
+      expect(check.mismatchedFields, ['plaintextSha256']);
+    });
+
+    test('a different stored-file fingerprint is a mismatch', () async {
+      final item = await makeItem('one');
+      client.serverRecords['one'] = recordFor(
+        item,
+        altered: {'ciphertextSha256': 'c' * 64},
+      );
+
+      final check = await sync.checkServerRecord(item);
+
+      expect(check.mismatchedFields, ['ciphertextSha256']);
+    });
+
+    // When evidence existed is half of what the server record proves.
+    test('a moved capture time is a mismatch', () async {
+      final item = await makeItem('one');
+      client.serverRecords['one'] = recordFor(
+        item,
+        altered: {'capturedAt': '2026-09-01T10:00:00.000Z'},
+      );
+
+      final check = await sync.checkServerRecord(item);
+
+      expect(check.status, ServerCheckStatus.mismatch);
+      expect(check.mismatchedFields, ['capturedAt']);
+    });
+
+    test('every disagreeing field is reported', () async {
+      final item = await makeItem('one');
+      client.serverRecords['one'] = recordFor(
+        item,
+        altered: {
+          'plaintextSha256': 'c' * 64,
+          'capturedAt': '2026-09-01T10:00:00.000Z',
+        },
+      );
+
+      final check = await sync.checkServerRecord(item);
+
+      expect(check.mismatchedFields, ['plaintextSha256', 'capturedAt']);
+    });
+
+    test('no record on the server is reported as such', () async {
+      final check = await sync.checkServerRecord(await makeItem('one'));
+
+      expect(check.status, ServerCheckStatus.notOnServer);
+      expect(check.reached, isFalse);
+    });
+
+    test('an unreachable server is unavailable, not a failure', () async {
+      client.serverUnreachable = true;
+
+      final check = await sync.checkServerRecord(await makeItem('one'));
+
+      expect(check.status, ServerCheckStatus.unavailable);
+      expect(check.reason, contains('internet'));
+      expect(check.disagrees, isFalse);
+    });
+
+    // A bug in the check must never accuse anyone of tampering.
+    test('an unexpected error is unavailable, never a mismatch', () async {
+      final broken = EvidenceSync(
+        client: _BrokenFetchClient(),
+        states: BackupStateStore(FakeSecureStore()),
+      );
+
+      final check = await broken.checkServerRecord(await makeItem('one'));
+
+      expect(check.status, ServerCheckStatus.unavailable);
+    });
+
+    test('without Firebase, nothing is contacted at all', () async {
+      client.configured = false;
+
+      final check = await sync.checkServerRecord(await makeItem('one'));
+
+      expect(check.status, ServerCheckStatus.unavailable);
+      expect(client.calls, isEmpty);
+    });
+
+    // The check must not create a record where there is none. A tampered
+    // local record would otherwise be written to the server as if it were
+    // the original -- laundering the very thing the check exists to catch.
+    test('a check only ever reads', () async {
+      final item = await makeItem('one');
+
+      await sync.checkServerRecord(item);
+
+      expect(client.calls, ['fetch:one']);
+      expect(client.metadataWrites, isEmpty);
     });
   });
 

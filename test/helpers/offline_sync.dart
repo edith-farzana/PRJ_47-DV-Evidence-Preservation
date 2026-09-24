@@ -32,6 +32,10 @@ class _OfflineClient implements EvidenceSyncClient {
 
   @override
   Future<Set<String>> backedUpIds() => throw _unavailable;
+
+  @override
+  Future<Map<String, Object?>?> fetchMetadata(String evidenceId) =>
+      throw _unavailable;
 }
 
 EvidenceSync offlineSync() {

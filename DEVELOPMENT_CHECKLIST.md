@@ -1,6 +1,6 @@
 # Secure Evidence — Development Checklist
 
-**Branch for this work:** `feature/icon-and-docs-cleanup` (P4 and P5 merged to `main` in PR #4)
+**Branch for this work:** `feature/server-cross-check` (P4 and P5 merged to `main` in PRs #4 and #5)
 **Last updated:** 2026-09-24
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
@@ -459,7 +459,7 @@ Update this after every gate.
 | P4 Safety fixes | 9% | ✅ Built, device check pending | 108/108 tests green; manual device pass (DCIM check) outstanding |
 | P5 Firebase + rules | 13% | ✅ Built and verified, minus Storage | 138 Dart tests green, 15 rules tests green, Firestore rules deployed. Blob upload and receipts deferred: Storage needs billing |
 | P6 Audit log | 10% | Not started | — |
-| P7 Verification & export | 13% | 🟡 Part done early | Evidence viewing, playback and on-demand integrity verification built (11 tests). Court export and recovery key outstanding |
+| P7 Verification & export | 13% | 🟡 Part done early | Evidence viewing, playback and on-demand integrity verification built, including a cross-check against the server record (28 tests). Court export and recovery key outstanding |
 | P8 Offline sync | 9% | Not started | — |
 | P9 Hardening & CI | 8% | Not started | — |
 

@@ -19,7 +19,7 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 - ✅ User-chosen PIN and unlock sequence; the PIN unlocks a Keystore-protected master key, with persistent lockout (unit tested)
 - ✅ In-app photo, video and audio capture — nothing is written to the device gallery
 - ✅ Encrypted local evidence store: AES-256-GCM per file, encrypted index with rollback detection, plaintext source destroyed after a verified write
-- ✅ Evidence vault, with playback and on-demand integrity verification; the decrypted copy is destroyed when the screen closes
+- ✅ Evidence vault, with playback and on-demand integrity verification — checked against the phone's own records **and** against the server's, which nobody can alter. The decrypted copy is destroyed when the screen closes
 - ✅ Panic (hold anywhere for a second), auto-lock on backgrounding, screenshots and the recents thumbnail blocked
 - ✅ Emergency helpline directory
 - ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore, where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests

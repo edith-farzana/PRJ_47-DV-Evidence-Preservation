@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -154,6 +155,40 @@ class FirebaseEvidenceClient implements EvidenceSyncClient {
       throw SyncFailedException(
         'Could not record the backup: '
         '${error.message}',
+      );
+    }
+  }
+
+  /// How long a verification waits for the server before reporting it
+  /// unreachable. Long enough for a slow connection, short enough that
+  /// the screen does not appear to hang.
+  static const Duration serverReadTimeout = Duration(seconds: 12);
+
+  @override
+  Future<Map<String, Object?>?> fetchMetadata(String evidenceId) async {
+    final uid = await _uid();
+
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('evidence')
+          .doc(evidenceId)
+          // Server only. With the default source the SDK falls back to its
+          // offline cache, which would compare this phone with itself.
+          .get(const GetOptions(source: Source.server))
+          .timeout(serverReadTimeout);
+
+      return snapshot.exists ? snapshot.data() : null;
+    } on TimeoutException {
+      throw const SyncUnavailableException(
+        'the server did not respond in time.',
+      );
+    } on FirebaseException catch (error) {
+      throw SyncUnavailableException(
+        error.code == 'unavailable'
+            ? 'there is no internet connection.'
+            : 'the server refused the request (${error.code}).',
       );
     }
   }

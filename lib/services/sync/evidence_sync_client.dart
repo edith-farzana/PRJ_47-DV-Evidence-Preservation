@@ -55,6 +55,17 @@ abstract class EvidenceSyncClient {
 
   /// Ids that have a receipt. Used to rebuild local state.
   Future<Set<String>> backedUpIds();
+
+  /// Reads `/users/{uid}/evidence/{evidenceId}` from the **server**.
+  ///
+  /// Returns null when no record exists. Throws
+  /// [SyncUnavailableException] when the server cannot be reached.
+  ///
+  /// Implementations must not answer from a local cache. A cached copy
+  /// is our own earlier write, stored on the very phone being checked,
+  /// so it proves nothing about whether that phone has been tampered
+  /// with.
+  Future<Map<String, Object?>?> fetchMetadata(String evidenceId);
 }
 
 /// The one place the uploaded metadata map is built.

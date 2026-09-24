@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,8 @@ import '../../../app/app_scope.dart';
 import '../../../models/evidence/backup_state.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../models/evidence/integrity_report.dart';
+import '../../../models/evidence/server_check.dart';
+import '../../../models/evidence/verification_verdict.dart';
 import '../../../services/storage/evidence_storage.dart';
 import '../../../services/sync/evidence_sync.dart';
 import '../../../services/sync/evidence_sync_client.dart';
@@ -42,7 +45,7 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
   String? _error;
   bool _opening = true;
 
-  IntegrityReport? _report;
+  VerificationVerdict? _result;
   bool _verifying = false;
 
   @override
@@ -96,9 +99,15 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
     setState(() => _verifying = true);
 
     final IntegrityReport report;
+    final ServerCheck server;
 
     try {
-      report = await _storage!.checkIntegrity(widget.item);
+      // Together: the server read does not need the decryption to finish,
+      // and on a slow connection it is the slower of the two.
+      (report, server) = await (
+        _storage!.checkIntegrity(widget.item),
+        AppScope.of(context).sync.checkServerRecord(widget.item),
+      ).wait;
     } catch (error) {
       if (!mounted) return;
 
@@ -113,13 +122,14 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
     if (!mounted) return;
 
     setState(() {
-      _report = report;
+      _result = VerificationVerdict(local: report, server: server);
       _verifying = false;
     });
 
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => IntegrityPage(item: widget.item, report: report),
+        builder: (_) =>
+            IntegrityPage(item: widget.item, report: report, server: server),
       ),
     );
   }
@@ -147,8 +157,8 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          if (_report != null) ...[
-            _VerdictBanner(report: _report!),
+          if (_result != null) ...[
+            _VerdictBanner(result: _result!),
             const SizedBox(height: 16),
           ],
 
@@ -668,14 +678,29 @@ class _BackupCardState extends State<_BackupCard> {
 }
 
 class _VerdictBanner extends StatelessWidget {
-  const _VerdictBanner({required this.report});
+  const _VerdictBanner({required this.result});
 
-  final IntegrityReport report;
+  final VerificationVerdict result;
 
   @override
   Widget build(BuildContext context) {
-    final passed = report.verified;
-    final color = passed ? const Color(0xFF67E8B1) : Colors.redAccent;
+    final (Color color, IconData icon, String title) = switch (result.verdict) {
+      Verdict.verified => (
+        const Color(0xFF67E8B1),
+        Icons.verified_outlined,
+        'Evidence Verified',
+      ),
+      Verdict.verifiedOnThisPhone => (
+        const Color(0xFFFFC857),
+        Icons.phonelink_lock,
+        'Verified on This Phone',
+      ),
+      Verdict.notVerified => (
+        Colors.redAccent,
+        Icons.gpp_bad_outlined,
+        'Verification Failed',
+      ),
+    };
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -687,27 +712,19 @@ class _VerdictBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            passed ? Icons.verified_outlined : Icons.gpp_bad_outlined,
-            color: color,
-          ),
+          Icon(icon, color: color),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  passed ? 'Evidence Verified' : 'Verification Failed',
+                  title,
                   style: TextStyle(color: color, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  passed
-                      ? 'AES-256-GCM authentication and SHA-256 integrity '
-                            'verification successful.'
-                      : report.failure ??
-                            'The recorded and recalculated hashes do not '
-                                'match.',
+                  result.explanation,
                   style: const TextStyle(
                     color: Color(0xFF9297A3),
                     fontSize: 12,
