@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secure_evidence_app/app/app_lock_controller.dart';
+import 'package:secure_evidence_app/services/audit/audit_log.dart';
 import 'package:secure_evidence_app/services/crypto/key_manager.dart';
 
 import '../helpers/fake_secure_store.dart';
@@ -199,6 +202,49 @@ void main() {
       controller.releaseAutoLock();
 
       expect(controller.state, AppLockState.locked);
+    });
+  });
+
+  group('activity log', () {
+    late Directory workspace;
+
+    setUp(() async {
+      workspace = await Directory.systemTemp.createTemp('lock_audit_');
+      controller = AppLockController(
+        keyManager: keyManager,
+        store: store,
+        audit: AuditLog(
+          baseDirectory: workspace,
+          store: store,
+          keyManager: keyManager,
+        ),
+      );
+    });
+
+    tearDown(() => workspace.delete(recursive: true));
+
+    // Landing in the pending list, not the chain, is the proof the key
+    // was already destroyed when the event was written. Panic must not
+    // wait for the log.
+    test('panic is recorded, after the key is gone', () async {
+      await unlock();
+
+      controller.lock();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.values['audit.v1.pending'], contains('"panic"'));
+    });
+
+    test('auto-lock is recorded as such, not as panic', () async {
+      await unlock();
+
+      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await Future<void>.delayed(Duration.zero);
+
+      final pending = store.values['audit.v1.pending']!;
+
+      expect(pending, contains('"autoLocked"'));
+      expect(pending, isNot(contains('"panic"')));
     });
   });
 }

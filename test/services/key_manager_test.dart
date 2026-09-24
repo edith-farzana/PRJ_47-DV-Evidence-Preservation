@@ -255,6 +255,90 @@ void main() {
   });
 
   // =================================================================
+  // Wrong PINs before a success
+  //
+  // The counter resets the moment the right PIN goes in. These are the
+  // last chance to know someone tried, so they are handed back with the
+  // success for the activity log to keep.
+  // =================================================================
+
+  group('wrong PINs before a success', () {
+    test('come back with the success, then are cleared', () async {
+      final manager = await setUpManager();
+      final firstWrong = now;
+
+      await manager.unlock('0000');
+      now = now.add(const Duration(minutes: 1));
+      await manager.unlock('1111');
+      now = now.add(const Duration(minutes: 1));
+
+      final result = await manager.unlock('1234');
+
+      expect(result.priorFailedAttempts, 2);
+      expect(result.priorFailureTimes, hasLength(2));
+      expect(
+        result.priorFailureTimes.first.isAtSameMomentAs(firstWrong),
+        isTrue,
+      );
+      expect(store.values.containsKey('km.v1.failureTimes'), isFalse);
+
+      manager.lock();
+      final next = await manager.unlock('1234');
+
+      expect(next.priorFailedAttempts, 0);
+      expect(next.priorFailureTimes, isEmpty);
+    });
+
+    test('the successful attempt itself is not among them', () async {
+      final manager = await setUpManager();
+
+      final result = await manager.unlock('1234');
+
+      expect(result.priorFailedAttempts, 0);
+      expect(result.priorFailureTimes, isEmpty);
+    });
+
+    test('a guess cut off mid-derivation already has its time', () async {
+      final manager = await setUpManager();
+
+      final pending = manager.unlock('0000');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(store.values['km.v1.failureTimes'], isNotNull);
+      await pending;
+    });
+
+    test('only the latest times are kept; the count is not capped', () async {
+      final manager = await setUpManager();
+      const attempts = KeyManager.maxFailureTimes + 6;
+
+      for (var i = 0; i < attempts; i++) {
+        // Past any lockout, so every attempt is actually made.
+        now = now.add(const Duration(hours: 2));
+        await manager.unlock('0000');
+      }
+
+      now = now.add(const Duration(hours: 2));
+      final result = await manager.unlock('1234');
+
+      expect(result.priorFailedAttempts, attempts);
+      expect(result.priorFailureTimes, hasLength(KeyManager.maxFailureTimes));
+    });
+
+    test('a wrong current PIN when changing the PIN is kept too', () async {
+      final manager = await setUpManager();
+      await manager.unlock('1234');
+
+      await manager.changePin(oldPin: '0000', newPin: '5678');
+      final result = await manager.changePin(oldPin: '1234', newPin: '5678');
+
+      expect(result.isSuccess, isTrue);
+      expect(result.priorFailedAttempts, 1);
+      expect(result.priorFailureTimes, hasLength(1));
+    });
+  });
+
+  // =================================================================
   // PIN change
   // =================================================================
 

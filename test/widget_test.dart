@@ -8,6 +8,7 @@ import 'package:secure_evidence_app/app/app_lock_controller.dart';
 import 'package:secure_evidence_app/features/auth/presentation/pin_page.dart';
 import 'package:secure_evidence_app/features/auth/presentation/setup_page.dart';
 import 'package:secure_evidence_app/features/calculator/presentation/calculator_page.dart';
+import 'package:secure_evidence_app/services/audit/audit_log.dart';
 import 'package:secure_evidence_app/services/crypto/key_manager.dart';
 import 'package:secure_evidence_app/services/storage/evidence_storage.dart';
 
@@ -29,6 +30,11 @@ SecureEvidenceApp buildApp({String? unlockSequence}) {
     ),
     lockController: AppLockController(keyManager: keyManager, store: store),
     sync: offlineSync(),
+    audit: AuditLog(
+      baseDirectory: Directory('${Directory.systemTemp.path}/unused'),
+      store: store,
+      keyManager: keyManager,
+    ),
     unlockSequence: unlockSequence,
   );
 }

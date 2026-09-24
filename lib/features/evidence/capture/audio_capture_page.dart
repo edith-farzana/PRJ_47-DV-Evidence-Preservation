@@ -6,6 +6,7 @@ import 'package:record/record.dart';
 
 import '../../../app/app_lock_controller.dart';
 import '../../../app/app_scope.dart';
+import '../../../models/audit/audit_entry.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../services/storage/secure_delete.dart';
 import 'capture_temp.dart';
@@ -116,6 +117,7 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
     if (!_recording || _saving) return;
 
     final storage = AppScope.of(context).storage;
+    final audit = AppScope.of(context).audit;
 
     setState(() {
       _saving = true;
@@ -144,6 +146,14 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
 
       // addEvidence destroyed the plaintext.
       _file = null;
+
+      unawaited(
+        audit.record(
+          AuditEventType.captured,
+          evidenceId: evidence.id,
+          detail: {'type': evidence.type.name},
+        ),
+      );
 
       if (!mounted) return;
 

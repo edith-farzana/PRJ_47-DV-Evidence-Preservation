@@ -5,6 +5,7 @@ import '../features/auth/presentation/pin_page.dart';
 import '../features/auth/presentation/setup_page.dart';
 import '../features/calculator/presentation/calculator_page.dart';
 import '../features/home/home_page.dart';
+import '../services/audit/audit_log.dart';
 import '../services/crypto/key_manager.dart';
 import '../services/storage/evidence_storage.dart';
 import '../services/sync/evidence_sync.dart';
@@ -18,6 +19,7 @@ class SecureEvidenceApp extends StatefulWidget {
     required this.storage,
     required this.lockController,
     required this.sync,
+    required this.audit,
     required this.unlockSequence,
   });
 
@@ -25,6 +27,7 @@ class SecureEvidenceApp extends StatefulWidget {
   final EvidenceStorage storage;
   final AppLockController lockController;
   final EvidenceSync sync;
+  final AuditLog audit;
 
   /// Null until first-run setup has been completed.
   final String? unlockSequence;
@@ -118,6 +121,7 @@ class _SecureEvidenceAppState extends State<SecureEvidenceApp> {
       storage: widget.storage,
       lockController: _lock,
       sync: widget.sync,
+      audit: widget.audit,
       child: MaterialApp(
         navigatorKey: _navigatorKey,
         scaffoldMessengerKey: _messengerKey,

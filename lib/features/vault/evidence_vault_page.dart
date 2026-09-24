@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../models/audit/audit_entry.dart';
 import '../../models/evidence/backup_state.dart';
 import '../../models/evidence/evidence_item.dart';
 import '../../services/storage/evidence_index.dart';
@@ -52,7 +53,14 @@ class _EvidenceVaultPageState extends State<EvidenceVaultPage> {
 
             // Catch-up for anything captured while offline. Metadata
             // goes up for every item; the media does not.
-            await scope.sync.syncPendingMetadata(items);
+            final recorded = await scope.sync.syncPendingMetadata(items);
+
+            for (final id in recorded) {
+              await scope.audit.record(
+                AuditEventType.recordedOnServer,
+                evidenceId: id,
+              );
+            }
           })
           // A load failure is already shown by the FutureBuilder.
           .catchError((Object _) {}),

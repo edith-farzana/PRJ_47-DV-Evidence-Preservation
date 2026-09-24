@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../models/audit/audit_entry.dart';
 import '../../../models/evidence/backup_state.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../models/evidence/integrity_report.dart';
 import '../../../models/evidence/server_check.dart';
 import '../../../models/evidence/verification_verdict.dart';
+import '../../../services/audit/audit_log.dart';
 import '../../../services/storage/evidence_storage.dart';
 import '../../../services/sync/evidence_sync.dart';
 import '../../../services/sync/evidence_sync_client.dart';
@@ -40,6 +42,7 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
   /// Held from didChangeDependencies: dispose must not reach for an
   /// InheritedWidget, and that is exactly when the preview is destroyed.
   EvidenceStorage? _storage;
+  AuditLog? _audit;
 
   File? _preview;
   String? _error;
@@ -54,6 +57,7 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
 
     if (_storage == null) {
       _storage = AppScope.of(context).storage;
+      _audit = AppScope.of(context).audit;
       _open();
     }
   }
@@ -85,6 +89,10 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
         _preview = preview;
         _opening = false;
       });
+
+      unawaited(
+        _audit!.record(AuditEventType.viewed, evidenceId: widget.item.id),
+      );
     } catch (error) {
       if (!mounted) return;
 
@@ -121,10 +129,20 @@ class _EvidenceDetailPageState extends State<EvidenceDetailPage> {
 
     if (!mounted) return;
 
+    final result = VerificationVerdict(local: report, server: server);
+
     setState(() {
-      _result = VerificationVerdict(local: report, server: server);
+      _result = result;
       _verifying = false;
     });
+
+    unawaited(
+      _audit!.record(
+        AuditEventType.verified,
+        evidenceId: widget.item.id,
+        detail: {'verdict': result.verdict.name},
+      ),
+    );
 
     await Navigator.of(context).push(
       MaterialPageRoute(

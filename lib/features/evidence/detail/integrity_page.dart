@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../models/audit/audit_entry.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../models/evidence/integrity_report.dart';
 import '../../../models/evidence/server_check.dart';
@@ -64,6 +65,19 @@ class _IntegrityPageState extends State<IntegrityPage> {
         _server = server;
         _running = false;
       });
+
+      unawaited(
+        scope.audit.record(
+          AuditEventType.verified,
+          evidenceId: widget.item.id,
+          detail: {
+            'verdict': VerificationVerdict(
+              local: report,
+              server: server,
+            ).verdict.name,
+          },
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
 

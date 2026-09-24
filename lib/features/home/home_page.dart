@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../services/audit/audit_log.dart';
 import '../../services/crypto/key_manager.dart';
+import '../audit/activity_log_page.dart';
 import '../auth/presentation/change_pin_page.dart';
 import '../evidence/capture/audio_capture_page.dart';
 import '../evidence/capture/in_app_camera_page.dart';
@@ -32,6 +34,44 @@ class _HomePageState extends State<HomePage> {
     const _EvidencePage(),
     _SettingsPage(keyManager: widget.keyManager),
   ];
+
+  AuditLog? _audit;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_audit == null) {
+      _audit = AppScope.of(context).audit..addListener(_showWrongPinNotice);
+
+      // Usually already waiting: the unlock sets it before this screen is
+      // first built.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showWrongPinNotice(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _audit?.removeListener(_showWrongPinNotice);
+    super.dispose();
+  }
+
+  /// Tells her if wrong PINs were entered while she was away. Once the
+  /// right PIN goes in the lockout counter resets, so without this she
+  /// would have no way of knowing someone tried.
+  void _showWrongPinNotice() {
+    if (!mounted) return;
+
+    final notice = _audit?.takeUnlockNotice();
+    if (notice == null) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => _WrongPinNotice(notice: notice),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -851,6 +891,106 @@ class _SettingsPageState extends State<_SettingsPage> {
               );
             },
           ),
+        ),
+
+        const SizedBox(height: 15),
+
+        Material(
+          color: HomePage.cardColor,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            leading: const Icon(Icons.history, color: HomePage.purple),
+            title: const Text(
+              'Activity log',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'Everything recorded here, and whether it is intact.',
+              style: TextStyle(color: HomePage.textMuted),
+            ),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: HomePage.textMuted,
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ActivityLogPage()),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown once, right after unlock, when wrong PINs came first.
+///
+/// Calm on purpose, and it allows for her own typos: the aim is that she
+/// knows, not that she is frightened by a false alarm.
+class _WrongPinNotice extends StatelessWidget {
+  const _WrongPinNotice({required this.notice});
+
+  final UnlockNotice notice;
+
+  static String _when(UnlockNotice notice) {
+    final first = notice.first?.toLocal();
+    final last = notice.last?.toLocal();
+
+    if (first == null || last == null) return '';
+
+    String two(int n) => n.toString().padLeft(2, '0');
+
+    final now = DateTime.now();
+
+    bool today(DateTime t) =>
+        t.year == now.year && t.month == now.month && t.day == now.day;
+
+    String label(DateTime t) {
+      final time = '${two(t.hour)}:${two(t.minute)}';
+      return today(t) ? time : '${two(t.day)}/${two(t.month)} $time';
+    }
+
+    return label(first) == label(last)
+        ? 'At ${label(first)}. '
+        : 'Between ${label(first)} and ${label(last)}. ';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = notice.count;
+
+    return AlertDialog(
+      backgroundColor: HomePage.cardColor,
+      icon: const Icon(
+        Icons.no_encryption_outlined,
+        color: Color(0xFFFFC857),
+        size: 32,
+      ),
+      title: Text(
+        '$count wrong PIN${count == 1 ? '' : 's'} since you last opened this',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white, fontSize: 18),
+      ),
+      content: Text(
+        "${_when(notice)}If that wasn't you, someone may have tried to get in.",
+        style: const TextStyle(color: HomePage.textMuted, height: 1.5),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(context)
+              ..pop()
+              ..push(
+                MaterialPageRoute(builder: (_) => const ActivityLogPage()),
+              );
+          },
+          child: const Text('View activity log'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('OK'),
         ),
       ],
     );

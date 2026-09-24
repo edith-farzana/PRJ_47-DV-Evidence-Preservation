@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_lock_controller.dart';
 import '../../../app/app_scope.dart';
+import '../../../models/audit/audit_entry.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../services/storage/evidence_storage.dart';
 import '../../../services/storage/secure_delete.dart';
@@ -239,6 +240,8 @@ class _InAppCameraPageState extends State<InAppCameraPage>
     EvidenceType type,
     String extension,
   ) async {
+    final audit = AppScope.of(context).audit;
+
     final evidence = await storage.addEvidence(
       sourceFile: _unsaved!,
       type: type,
@@ -248,6 +251,14 @@ class _InAppCameraPageState extends State<InAppCameraPage>
 
     // addEvidence destroyed the plaintext.
     _unsaved = null;
+
+    unawaited(
+      audit.record(
+        AuditEventType.captured,
+        evidenceId: evidence.id,
+        detail: {'type': evidence.type.name},
+      ),
+    );
 
     if (!mounted) return;
 

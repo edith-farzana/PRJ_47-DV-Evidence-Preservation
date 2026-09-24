@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
+import '../models/audit/audit_entry.dart';
+import '../services/audit/audit_log.dart';
 import '../services/crypto/key_manager.dart';
 import '../services/crypto/secure_store.dart';
 
@@ -15,6 +19,15 @@ enum AppLockState {
   unlocked,
 }
 
+/// Why the app locked. Recorded in the activity log.
+enum LockReason {
+  /// A one-second hold anywhere.
+  panic,
+
+  /// The app went to the background with auto-lock on.
+  background,
+}
+
 /// The app's lock state, and the only place that decides when to drop
 /// the master key.
 ///
@@ -22,10 +35,17 @@ enum AppLockState {
 /// then listeners are told, so no screen that still needs the key can
 /// be built in between.
 class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
-  AppLockController({required this._keyManager, required this._store});
+  AppLockController({
+    required this._keyManager,
+    required this._store,
+    this._audit,
+  });
 
   final KeyManager _keyManager;
   final SecureStore _store;
+
+  /// Optional so the lock logic can be tested on its own.
+  final AuditLog? _audit;
 
   static const String _autoLockKey = 'app.v1.autoLock';
 
@@ -63,21 +83,38 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// The PIN unwrapped the master key.
-  void unlocked() {
+  ///
+  /// [result] carries the wrong PINs entered before this one, which the
+  /// key manager has just forgotten; the activity log keeps them.
+  void unlocked([UnlockResult? result]) {
     _state = AppLockState.unlocked;
     notifyListeners();
+
+    if (result != null) {
+      unawaited(_audit?.onUnlocked(result));
+    }
   }
 
   /// Drops the master key and returns to the calculator.
   ///
   /// Used by panic, so it must not wait on anything: the key is
-  /// destroyed synchronously before listeners run.
-  void lock() {
+  /// destroyed synchronously before listeners run. The activity log hears
+  /// about it only afterwards, without being awaited, and with no key --
+  /// so the event is kept pending until the next unlock.
+  void lock({LockReason reason = LockReason.panic}) {
     _keyManager.lock();
     _holds = 0;
     _lockCount++;
     _state = AppLockState.locked;
     notifyListeners();
+
+    unawaited(
+      _audit?.record(
+        reason == LockReason.panic
+            ? AuditEventType.panic
+            : AuditEventType.autoLocked,
+      ),
+    );
   }
 
   /// Defers auto-lock while a capture is in progress.
@@ -125,7 +162,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     // The PIN screen counts too: it should not be what someone sees
     // when they pick up the phone.
     if (_autoLock && _state != AppLockState.locked) {
-      lock();
+      lock(reason: LockReason.background);
     }
   }
 }
