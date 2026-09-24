@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/evidence/backup_state.dart';
 import '../../models/evidence/evidence_item.dart';
+import '../../models/evidence/server_check.dart';
 import 'backup_state_store.dart';
 import 'evidence_sync_client.dart';
 import 'sync_config.dart';
@@ -166,6 +167,60 @@ class EvidenceSync extends ChangeNotifier {
     }
 
     return uploaded;
+  }
+
+  /// Compares [item] with the server's record of it.
+  ///
+  /// **Read-only, by construction.** If there is no server record, this
+  /// does not create one: a tampered local record would then be written
+  /// to the server as if it were the original, and the check would
+  /// launder the very thing it exists to catch.
+  ///
+  /// Never throws. Every way the server can fail to answer is reported
+  /// as [ServerCheckStatus.unavailable] -- neutral, because not reaching
+  /// the server says nothing about the evidence.
+  Future<ServerCheck> checkServerRecord(EvidenceItem item) async {
+    if (!_client.isConfigured) {
+      return const ServerCheck.unavailable(
+        'Firebase is not set up in this build.',
+      );
+    }
+
+    final Map<String, Object?>? server;
+
+    try {
+      server = await _client.fetchMetadata(item.id);
+    } on SyncUnavailableException catch (error) {
+      return ServerCheck.unavailable(error.message);
+    } catch (error) {
+      // An unexpected failure is reported as "not reached", never as
+      // tampering: a bug here must not accuse anyone.
+      return ServerCheck.unavailable('$error');
+    }
+
+    if (server == null) {
+      return const ServerCheck.notOnServer();
+    }
+
+    // What this phone would have uploaded for this item, built by the same
+    // function that uploaded it -- so the two cannot drift apart.
+    final expected = metadataPayload(item);
+
+    final mismatched = [
+      for (final field in serverCheckedFields)
+        if (server[field] != expected[field]) field,
+    ];
+
+    final serverHash = server['plaintextSha256'] as String?;
+
+    if (mismatched.isEmpty) {
+      return ServerCheck.matches(serverPlaintextSha256: serverHash);
+    }
+
+    return ServerCheck.mismatch(
+      fields: mismatched,
+      serverPlaintextSha256: serverHash,
+    );
   }
 
   /// Rebuilds local state from the receipts on the server, which are

@@ -2,7 +2,7 @@
 
 **A complete walk-through, in plain language**
 
-**Last updated:** 2026-09-23
+**Last updated:** 2026-09-24
 
 ---
 
@@ -244,9 +244,9 @@ The decrypted copy is deleted:
 At no point does a readable copy of the evidence sit anywhere on the phone for
 longer than the screen is open.
 
-### Verifying evidence — the three fingerprints
+### Verifying evidence — the four fingerprints
 
-This is what the **Verify Integrity** button does, and what the three codes on
+This is what the **Verify Integrity** button does, and what the four codes on
 that screen mean.
 
 | Shown on screen | What it is | Where it comes from |
@@ -254,6 +254,7 @@ that screen mean.
 | **Recorded** | The fingerprint taken at the moment of capture | Read from the encrypted list on the phone |
 | **Recalculated** | The fingerprint of what comes out when the file is decrypted right now | Computed fresh, on the spot |
 | **Stored file** | The fingerprint of the scrambled file exactly as it sits on the phone today | Computed fresh from the file on disk |
+| **Server record** | The fingerprint recorded on the server at capture time | Fetched from the server — the one copy nobody can change |
 
 Then:
 
@@ -261,9 +262,23 @@ Then:
   captured.
 - **Stored file matches its recorded value** → the scrambled file on disk has
   not been touched or corrupted.
+- **Recorded matches the Server record** → the phone's own record has not been
+  replaced either. This also compares the capture time, so a record whose date
+  has been moved is caught too.
 
-If both match, the screen shows **INTEGRITY VERIFIED**. If either does not, it
-says so and does not soften it.
+The app always reads the server itself, never a copy it saved earlier. A saved
+copy lives on the same phone being checked, so it would prove nothing.
+
+The result is one of three verdicts, and the app never blurs them:
+
+| Verdict | What it means |
+|---|---|
+| **INTEGRITY VERIFIED** | Every check passed, and the server agrees |
+| **VERIFIED ON THIS PHONE** | The phone's checks passed, but the server could not be asked — no internet, or no record there yet. The screen says which |
+| **INTEGRITY NOT VERIFIED** | A check failed, or the server disagrees. Never softened |
+
+Being unable to reach the server is not evidence of tampering, and is never
+shown as if it were. A server that *disagrees* always is.
 
 ### How tampering is actually detected
 
@@ -277,24 +292,25 @@ Every way someone might interfere, and what happens:
 | **Deletes evidence from the phone** | The file is gone, but the record on the server is not. It still proves a file with that fingerprint existed at that time, so the deletion is **provable** |
 | **Restores an old copy of the list**, hiding recent captures | The seal does not match. Reported |
 | **Corrupts the file accidentally** — storage fault, bad copy | Caught by the same check. The app cannot tell malice from accident, and does not pretend to |
+| **Has the phone *and* the PIN, and replaces a file together with its entry in the list** | Everything on the phone now agrees with itself — but not with the server, whose record nobody can change. **INTEGRITY NOT VERIFIED**, naming what disagrees |
 
 Notice what the app does **not** do: guess, or reassure. Anything it cannot
 verify is reported as unverified.
 
-### A limitation worth stating plainly
+### What verification still cannot catch
 
-Everything above is checked **on the phone, against the phone's own records**.
-The record on the server is written, but the app does not yet fetch it back to
-compare.
+The server record is only as good as the moment it was made. The app sends it
+the next time the vault is opened with an internet connection.
 
-That matters for one specific scenario: someone who has the phone **and** the
-PIN could, in principle, replace both the evidence file and its entry in the
-list, and local verification would pass. Comparing against the server's copy —
-which cannot be altered by anyone — would catch exactly that, since the two
-fingerprints would disagree.
+So if a phone is kept **offline from the moment of capture**, there is no server
+record to compare against, and verification can only say **VERIFIED ON THIS
+PHONE**. Someone who tampered with evidence before it ever reached the server
+would not be caught by the server check.
 
-This is a known gap, it is small to close, and it is the next thing worth
-building.
+Checking never *creates* a server record, deliberately. If it did, a record
+altered on the phone would be sent to the server as though it were the
+original, and the check would end up vouching for exactly what it exists to
+catch.
 
 ### Panic
 
@@ -471,7 +487,8 @@ A ten-minute demonstration, in the order that shows the most:
 6. **Copy the encrypted file off the phone and try to open it.** It will not
    open in any viewer.
 7. **Open the item in the app.** It displays normally.
-8. **Tap Verify Integrity.** Watch the three fingerprints match.
+8. **Tap Verify Integrity.** Watch all four fingerprints match — including the
+   one fetched from the server.
 9. **Hold the screen for one second.** Instant calculator. Press Back — it does
    not return. Getting in needs the PIN again.
 10. **In the Firebase console**, find the record. It contains only fingerprints
