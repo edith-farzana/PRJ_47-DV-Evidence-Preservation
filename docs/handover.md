@@ -65,6 +65,17 @@ Undo: `brew uninstall --cask flutter android-commandlinetools`, `brew uninstall 
 ## Session log
 _Newest first. One short entry per session._
 
+### 2026-10-24 · claude-opus-5-5 (README split and ABOUT.md)
+- What changed: the README is now the setup guide, the launch video
+  (`docs/media/launch-video.mp4`, poster beside it) and a short description.
+  Everything else moved to a new `ABOUT.md`: the origin story with cited Indian
+  figures, the problem, the solution, what works today, the technical design
+  and the legal notes. Also dropped a stray `</p>` left at the end of the
+  README by `91d21f9`.
+- Why: owner asked for the two-part split and the video in the README.
+- Left unfinished: optional inline player. Drag the MP4 into any GitHub comment
+  box, then swap the poster link in the README for the URL GitHub gives.
+
 ### 2026-10-24 · claude-opus-5-5 (/brag launch video)
 - What changed: made a launch video in `brag-output/` (`brag.mp4`,
   poster `brag.jpg`, `share-copy.txt`, plan, brief, and the Hyperframes

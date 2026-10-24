@@ -2,6 +2,23 @@
 
 _Newest first. Log the why, not just the what._
 
+### 2026-10-24 · README split, and the launch video committed to the repo
+- Context: the owner asked for the README to hold only the setup guide, the
+  launch video and a short description, with everything else, including how
+  the idea came about, in a second document.
+- Options for the video:
+  A. Upload it through GitHub's web editor for an inline player (a manual
+     step, and the file lives outside the repo).
+  B. Commit the MP4 and a poster to `docs/media/`; the poster links to it.
+  C. B now, then switch to A's inline player once the owner uploads it.
+- Decision: C. Part 2 lives in `ABOUT.md` at the repo root (owner's choice).
+- Why: B works as soon as it merges, with no manual step; a 4.1 MB binary in
+  history is an acceptable cost. The origin story uses only figures with a
+  source: "about 40% of cases pending" was dropped (no source found) for the
+  4.71 lakh pending Domestic Violence Act cases the Supreme Court cited in
+  February 2023, and "85–90% never reach an FIR" is stated as NFHS-5's 86% who
+  sought no help at all. Model: claude-opus-5-5.
+
 ### 2026-10-24 · When the server record is sent
 - Context: metadata reached Firestore only when the vault screen opened. A
   capture made by someone who never reopened the vault while online got no
