@@ -10,9 +10,9 @@ Secure Evidence is an Android app for survivors of domestic violence. On the pho
 
 ## 🎬 Launch video
 
-[![Secure Evidence launch video: a calculator that opens an encrypted evidence vault](docs/media/launch-video-poster.jpg)](docs/media/launch-video.mp4)
+https://github.com/user-attachments/assets/19d3377a-b9b3-4b67-a9d3-d001e069a8b6
 
-*33 seconds: the calculator, the secret sum, capturing evidence, the four-fingerprint integrity check, a swapped file being caught, and the panic hold. The screens are rebuilt from the app's own code, with made-up data.*
+*33 seconds, with sound: the calculator, the secret sum, capturing evidence, the four-fingerprint integrity check, a swapped file being caught, and the panic hold. The screens are rebuilt from the app's own code, with made-up data. The video file is also in the repo at [`docs/media/launch-video.mp4`](docs/media/launch-video.mp4).*
 
 ---
 
