@@ -73,8 +73,10 @@ _Newest first. One short entry per session._
   and the legal notes. Also dropped a stray `</p>` left at the end of the
   README by `91d21f9`.
 - Why: owner asked for the two-part split and the video in the README.
-- Left unfinished: optional inline player. Drag the MP4 into any GitHub comment
-  box, then swap the poster link in the README for the URL GitHub gives.
+- Left unfinished: nothing. The README now plays the video inline from a
+  GitHub upload (`user-attachments/assets/19d3377a-…`, uploaded through the
+  PR #11 comment box and not posted); `docs/media/launch-video.mp4` stays as
+  the source copy, and the poster JPG is no longer referenced.
 
 ### 2026-10-24 · claude-opus-5-5 (/brag launch video)
 - What changed: made a launch video in `brag-output/` (`brag.mp4`,

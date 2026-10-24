@@ -12,6 +12,9 @@ _Newest first. Log the why, not just the what._
   B. Commit the MP4 and a poster to `docs/media/`; the poster links to it.
   C. B now, then switch to A's inline player once the owner uploads it.
 - Decision: C. Part 2 lives in `ABOUT.md` at the repo root (owner's choice).
+  Done the same day: GitHub's file page refuses to show a 4 MB MP4 and serves
+  the raw file as a download, so the poster link led nowhere watchable. The
+  README now embeds the GitHub-uploaded copy, which plays inline.
 - Why: B works as soon as it merges, with no manual step; a 4.1 MB binary in
   history is an acceptable cost. The origin story uses only figures with a
   source: "about 40% of cases pending" was dropped (no source found) for the
