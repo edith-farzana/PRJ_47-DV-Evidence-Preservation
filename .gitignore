@@ -56,3 +56,6 @@ lib/firebase_options.dart
 
 # Rules-test dependencies
 test/rules/node_modules/
+
+# Launch video from /brag: rendered media, music and the Hyperframes project
+/brag-output/

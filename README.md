@@ -10,7 +10,7 @@
 
 ## 🚧 Current Status
 
-**This project is under active development — approximately 95% complete.** Everything below is covered by automated tests (207 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
+**This project is under active development — approximately 95% complete.** Everything below is covered by automated tests (220 app tests, 15 server-rule tests); the full on-device test pass is still outstanding.
 
 This README describes the **design goals** of Secure Evidence. Sections below marked 🔴 are specified and planned but **not yet implemented**. We are documenting the target architecture openly rather than describing unbuilt features as if they shipped.
 
@@ -24,7 +24,7 @@ This README describes the **design goals** of Secure Evidence. Sections below ma
 - ✅ Emergency helpline directory
 - ✅ **Court-export bundle**: chosen evidence plus a PDF manifest of fingerprints, verification results and custody history, and instructions anyone can follow to check it with standard tools. AES-256 password-protected by default; only verified items leave; nothing decrypted is left on the phone
 - ✅ Tamper-evident **activity log**: every unlock, wrong PIN, panic, capture and view, hash-chained so any edit, deletion or rollback shows. Wrong PINs entered while she was away are shown to her at the next unlock — until now they left no trace once the right PIN went in
-- ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore, where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests
+- ✅ Firebase backend with **server-enforced immutability**: every capture's fingerprint is recorded in Firestore straight after capture (or at the next unlock, if the phone was offline), where update and delete are denied to everyone — including the account that created it. Rules deployed and covered by 15 emulator tests
 
 **Built, but switched off**
 - 🟡 Per-item opt-in cloud backup of the encrypted files. Firebase Storage needs a billing account we have not added, so the app says so plainly rather than failing. Evidence media leaves the phone only when she exports it
@@ -162,6 +162,13 @@ flutterfire configure
 ```
 
 Choose the Firebase project and **Android** only. Then `flutter build apk`. Without that step the Android build stops at the Google Services plugin.
+
+To run the tests: `flutter test` for the app. The server-rule tests run against the Firebase emulator, so they need the Firebase CLI:
+
+```bash
+npm --prefix test/rules ci
+firebase emulators:exec --only auth,firestore,storage "npm --prefix test/rules test"
+```
 
 ---
 
