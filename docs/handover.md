@@ -2,29 +2,38 @@
 
 ## Current state
 _Rewrite this section each time. Last updated: 2026-10-24 · claude-opus-5-5_
-- Working on: P8 (offline sync). The metadata half is done on branch
-  `claude/busy-kalam-aac46d`, in a PR against `main`.
+- Working on: waiting for the owner's on-device feedback on the release APK.
 - Done:
   - The dev toolchain is installed globally on this Mac (see "Dev environment"
-    below).
-  - The server record is now sent straight after capture and at every unlock,
-    not only when the vault opens. See
-    `docs/features/2026-10-24-metadata-at-capture-and-unlock.md`. 220 Dart
-    tests pass and `flutter analyze` is clean.
-  - The Firestore/Storage rules tests pass on the emulator (15 tests). The
-    rules are unchanged by the P8 work.
-- Next step: generate the Firebase config files (`firebase login`, then
-  `flutterfire configure`, Android only) so `flutter build apk` and
-  `flutter run` work. Then the on-device check of the P8 change (steps in the
-  feature file), then the rest of P8: a blob upload queue with backoff, and
-  per-item sync status.
-- Blocked on / open questions: `android/app/google-services.json` and
-  `lib/firebase_options.dart` are not in git by design, and creating them needs
-  the owner's Firebase sign-in.
+    below), and the Firebase config files are generated locally (gitignored).
+  - P8 metadata half merged to `main` (PR #9, `a0c4f5a`): the server record is
+    sent straight after capture and at every unlock. See
+    `docs/features/2026-10-24-metadata-at-capture-and-unlock.md`.
+  - On `a0c4f5a`: `flutter analyze` clean, 220/220 Flutter tests pass, 15/15
+    rules tests pass on the emulator.
+  - Release APK built from `a0c4f5a` and copied to
+    `~/Desktop/SecureEvidence-v1.0.0-build1-a0c4f5a-release.apk` (60.7 MB,
+    sha256 `53827b64…0e123f67`). Installed and launched on the
+    `Pixel_8_API_36` emulator: it reaches the first-run Set up screen with no
+    crashes. Not taken past setup there, so no Firebase traffic was tested.
+  - Only `main` remains, locally and on GitHub. The deleted branches
+    (`master`, `feature/court-export`, `claude/busy-kalam-aac46d`) were all
+    fully contained in `main`.
+- Next step: the on-device check of the P8 change (steps in the feature file)
+  using the Desktop APK, then the rest of P8: a blob upload queue with backoff,
+  and per-item sync status.
+- Blocked on / open questions: the owner's device feedback.
 - Gotchas:
+  - Screenshots and `adb screencap` of the app are black by design:
+    `MainActivity.kt` sets `FLAG_SECURE`. Read the screen with
+    `adb shell uiautomator dump` instead.
+  - Launch it on a device with
+    `adb shell am start -n com.pocketcalc.calculator/.MainActivity`;
+    `adb shell monkey -p …` failed (exit -5) on the emulator.
+  - Release builds are signed with the debug key (`android/app/build.gradle.kts`).
+    Fine for sideloading, not for the Play Store.
   - The JDK is Homebrew's keg-only `openjdk@21`, not a system JDK. `/usr/bin/java` still says "Unable to locate a Java Runtime"; use the `JAVA_HOME` set in `~/.zshrc`. Flutter is pointed at it with `flutter config --jdk-dir`.
   - The Android SDK lives at `/opt/homebrew/share/android-commandlinetools`, not `~/Library/Android/sdk`.
-  - `flutter pub get` on Flutter 3.47.7 rewrites the generated plugin registrants for linux/macos/windows to match the current pubspec (adds share_plus and video_player, drops file_selector). The diff is expected.
   - The `PERMISSION_DENIED` lines in the rules-test output are the denials the tests expect, not failures.
   - Never `await` `EvidenceSync.recordCaptured` or `catchUp` from a screen or
     the lock path. Offline, the Firestore SDK may hold a `set()` open until it
@@ -55,6 +64,32 @@ Undo: `brew uninstall --cask flutter android-commandlinetools`, `brew uninstall 
 
 ## Session log
 _Newest first. One short entry per session._
+
+### 2026-10-24 · claude-opus-5-5 (/brag launch video)
+- What changed: made a launch video in `brag-output/` (`brag.mp4`,
+  poster `brag.jpg`, `share-copy.txt`, plan, brief, and the Hyperframes
+  0.8.191 project in `brag-output/composition/`). The app's screens are
+  recreated in HTML from the Flutter source, with made-up filenames,
+  dates and hashes. No app code changed. Later the same day it grew from
+  25 s to 32.75 s to show the full integrity check (Evidence Detail →
+  four fingerprints → INTEGRITY VERIFIED) and a swapped file being caught
+  (INTEGRITY NOT VERIFIED). The 25 s composition is kept at
+  `brag-output/work/index.before-integrity.html`.
+- Why: owner ran `/brag`, then asked for the integrity check to be shown.
+- Left unfinished: nothing. `brag-output/` is gitignored on purpose (local
+  media, a ~2.6 MB music file and `.hyperframes/` artifacts). Re-render with
+  `npx hyperframes render --quality delivery --output ../brag.mp4` from
+  `brag-output/composition/`, then redo the poster/audio pass described in
+  `brag-output/brag-plan.md` ("As built").
+
+### 2026-10-24 · claude-opus-5-5 (tests, branch cleanup, release APK)
+- What changed: re-ran every test suite on `a0c4f5a` with the real Firebase
+  config; deleted every branch except `main` locally and on GitHub (and the
+  merged session's worktree); built the release APK to the Desktop and
+  smoke-launched it on the emulator.
+- Why: owner asked for a full test pass, a single-branch repo, and an APK to
+  try on a phone.
+- Left unfinished: on-device testing of the features (owner).
 
 ### 2026-10-24 · claude-opus-5-5 (P8 metadata sync)
 - What changed: metadata sync at capture (`saveCapture`) and at unlock
