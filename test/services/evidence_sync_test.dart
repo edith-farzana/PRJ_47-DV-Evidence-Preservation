@@ -1,14 +1,22 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secure_evidence_app/app/app_lock_controller.dart';
+import 'package:secure_evidence_app/features/evidence/capture/save_capture.dart';
+import 'package:secure_evidence_app/models/audit/audit_entry.dart';
 import 'package:secure_evidence_app/models/evidence/backup_state.dart';
 import 'package:secure_evidence_app/models/evidence/evidence_item.dart';
 import 'package:secure_evidence_app/models/evidence/server_check.dart';
+import 'package:secure_evidence_app/services/audit/audit_log.dart';
+import 'package:secure_evidence_app/services/crypto/key_manager.dart';
+import 'package:secure_evidence_app/services/storage/evidence_storage.dart';
 import 'package:secure_evidence_app/services/sync/backup_state_store.dart';
 import 'package:secure_evidence_app/services/sync/evidence_sync.dart';
 import 'package:secure_evidence_app/services/sync/evidence_sync_client.dart';
 
 import '../helpers/fake_secure_store.dart';
+import '../helpers/offline_sync.dart';
 
 /// Records what was sent, in what order, without a network.
 class _FakeClient implements EvidenceSyncClient {
@@ -21,6 +29,18 @@ class _FakeClient implements EvidenceSyncClient {
 
   bool configured = true;
   bool uploadsFail = false;
+
+  /// No signal: every write is refused, as the real client refuses when
+  /// it cannot sign in or reach Firestore.
+  bool offline = false;
+
+  /// While set, writes wait on it: a server that has not answered yet.
+  /// Offline, Firestore holds a write open like this until the signal
+  /// returns.
+  Completer<void>? holdWrites;
+
+  /// Every write tried, including those refused or still waiting.
+  int writeAttempts = 0;
 
   List<String> get metadataWrites => _ids('metadata');
   List<String> get blobUploads => _ids('blob');
@@ -39,6 +59,14 @@ class _FakeClient implements EvidenceSyncClient {
     String evidenceId,
     Map<String, Object?> payload,
   ) async {
+    writeAttempts++;
+
+    if (offline) {
+      throw const SyncUnavailableException('there is no internet connection.');
+    }
+
+    await holdWrites?.future;
+
     calls.add('metadata:$evidenceId');
     payloads.add(payload);
   }
@@ -85,6 +113,41 @@ class _BrokenFetchClient extends _FakeClient {
   @override
   Future<Map<String, Object?>?> fetchMetadata(String evidenceId) async {
     throw StateError('unexpected');
+  }
+}
+
+/// A client whose write blows up in a way nobody planned for -- before
+/// it has even returned a future -- until [broken] is cleared.
+class _BrokenWriteClient extends _FakeClient {
+  bool broken = true;
+
+  @override
+  Future<void> writeMetadata(String evidenceId, Map<String, Object?> payload) {
+    if (broken) {
+      writeAttempts++;
+      throw StateError('unexpected');
+    }
+
+    return super.writeMetadata(evidenceId, payload);
+  }
+}
+
+/// Lets work that was started and not awaited run to its next real wait.
+Future<void> settle() async {
+  for (var i = 0; i < 10; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
+/// Waits for background work that does real file I/O, which [settle]
+/// cannot see the end of. Fails rather than hanging.
+Future<void> eventually(bool Function() done) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+
+  while (!done()) {
+    if (DateTime.now().isAfter(deadline)) fail('Timed out waiting.');
+
+    await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
 
@@ -481,5 +544,308 @@ void main() {
 
       expect(sync.notBackedUp(items), 1);
     });
+  });
+
+  // The server record is what makes a later deletion provable, so it
+  // must not depend on the vault being opened. These run a real capture
+  // through `saveCapture`, the path both capture screens take, and an
+  // unlock wired the way main.dart wires it.
+  group('recording at capture and at unlock', () {
+    late FakeSecureStore store;
+    late KeyManager keyManager;
+    late EvidenceStorage storage;
+    late AuditLog audit;
+
+    /// Ids the service reported recorded, in order -- what the app
+    /// writes to the activity log.
+    late List<String> announced;
+
+    /// The service as main.dart builds it, around [withClient].
+    Future<EvidenceSync> appSync(EvidenceSyncClient withClient) async {
+      final built = EvidenceSync(
+        client: withClient,
+        states: BackupStateStore(store),
+        onRecorded: (id) async {
+          await audit.record(AuditEventType.recordedOnServer, evidenceId: id);
+          announced.add(id);
+        },
+      );
+
+      await built.load();
+
+      return built;
+    }
+
+    /// A capture, through the path both capture screens take.
+    Future<EvidenceItem> capture(
+      EvidenceSync through, {
+      String name = 'photo.jpg',
+    }) async {
+      final source = File('${workspace.path}/capture/$name');
+
+      await source.parent.create(recursive: true);
+      await source.writeAsBytes(List<int>.generate(2048, (i) => i % 251));
+
+      return saveCapture(
+        storage: storage,
+        audit: audit,
+        sync: through,
+        source: source,
+        type: EvidenceType.photo,
+        originalFileName: name,
+      );
+    }
+
+    /// Locks, then unlocks with the PIN through a controller wired as in
+    /// main.dart. Returns the controller, so a test can panic.
+    Future<AppLockController> lockAndUnlock(EvidenceSync through) async {
+      keyManager.lock();
+
+      final controller = AppLockController(
+        keyManager: keyManager,
+        store: store,
+        afterUnlock: () => through.catchUp(
+          storage.getEvidence,
+          keepGoing: () => keyManager.isUnlocked,
+        ),
+      );
+
+      final result = await keyManager.unlock('1234');
+
+      controller
+        ..showPin()
+        ..unlocked(result);
+
+      return controller;
+    }
+
+    setUp(() async {
+      store = FakeSecureStore();
+      keyManager = KeyManager(store, kdfIterations: 1000);
+      await keyManager.setUp(pin: '1234', unlockSequence: '7×3-1=');
+
+      storage = EvidenceStorage(
+        baseDirectory: workspace,
+        keyManager: keyManager,
+        store: store,
+      );
+
+      audit = AuditLog(
+        baseDirectory: workspace,
+        store: store,
+        keyManager: keyManager,
+      );
+
+      announced = [];
+    });
+
+    tearDown(() async {
+      // The capture's log entry is written in the background. Reading the
+      // log queues behind it, so the workspace is not deleted mid-write.
+      try {
+        await audit.entries();
+      } catch (_) {
+        // Locked by a test that panicked: nothing to wait for.
+      }
+    });
+
+    test('a capture is recorded on the server straight away', () async {
+      final sync = await appSync(client);
+
+      final item = await capture(sync);
+
+      await eventually(() => announced.isNotEmpty);
+
+      expect(client.metadataWrites, [item.id]);
+      expect(announced, [item.id]);
+
+      // Metadata only: exactly what metadataPayload builds -- hashes, the
+      // wrapped key, a time and a size. Never the file name.
+      expect(client.payloads.single, metadataPayload(item));
+      expect(
+        client.payloads.single.values.join(' '),
+        isNot(contains('photo.jpg')),
+      );
+    });
+
+    test(
+      'the activity log shows the capture, then the server record',
+      () async {
+        final sync = await appSync(client);
+
+        final item = await capture(sync);
+
+        await eventually(() => announced.isNotEmpty);
+
+        final history = (await audit.entries())
+            .where((entry) => entry.evidenceId == item.id)
+            .map((entry) => entry.type)
+            .toList();
+
+        expect(history, ['captured', 'recordedOnServer']);
+      },
+    );
+
+    test(
+      'a capture made with no signal is recorded at the next unlock',
+      () async {
+        client.offline = true;
+        final sync = await appSync(client);
+
+        final item = await capture(sync);
+        await settle();
+
+        // Tried at capture, and refused.
+        expect(client.writeAttempts, 1);
+        expect(client.metadataWrites, isEmpty);
+
+        // The vault is never opened. The signal comes back, and later she
+        // unlocks the app again.
+        client.offline = false;
+        await lockAndUnlock(sync);
+
+        await eventually(() => announced.isNotEmpty);
+
+        expect(client.metadataWrites, [item.id]);
+        expect(announced, [item.id]);
+      },
+    );
+
+    test('a failure while recording never fails the capture', () async {
+      final broken = _BrokenWriteClient();
+      final sync = await appSync(broken);
+
+      final item = await capture(sync);
+      await settle();
+
+      // Saved and listed, although the write blew up. An error escaping
+      // into the test zone would already have failed this test.
+      expect((await storage.getEvidence()).map((e) => e.id), [item.id]);
+      expect(broken.writeAttempts, 1);
+
+      // Still pending, so the next unlock sends it.
+      broken.broken = false;
+      await lockAndUnlock(sync);
+
+      await eventually(() => announced.isNotEmpty);
+
+      expect(broken.metadataWrites, [item.id]);
+    });
+
+    test('a server that never answers does not hold up the capture', () async {
+      client.holdWrites = Completer<void>();
+      final sync = await appSync(client);
+
+      // Times out, failing the test, if the capture waits for the server.
+      final item = await capture(sync).timeout(const Duration(seconds: 10));
+
+      expect((await storage.getEvidence()).map((e) => e.id), [item.id]);
+      expect(client.writeAttempts, 1);
+      expect(client.metadataWrites, isEmpty);
+
+      // The signal returns, and the write that was waiting lands.
+      client.holdWrites!.complete();
+
+      await eventually(() => announced.isNotEmpty);
+
+      expect(client.metadataWrites, [item.id]);
+    });
+
+    test('capture, unlock and vault at once send the record once', () async {
+      client.holdWrites = Completer<void>();
+      final sync = await appSync(client);
+
+      final item = await capture(sync);
+
+      // The capture's write is still waiting when the other two arrive.
+      await sync.catchUp(storage.getEvidence);
+      await sync.syncPendingMetadata([item]);
+
+      expect(client.writeAttempts, 1);
+
+      client.holdWrites!.complete();
+
+      await eventually(() => announced.isNotEmpty);
+      await settle();
+
+      expect(client.metadataWrites, [item.id]);
+      expect(announced, [item.id]);
+    });
+
+    test('a panic during the unlock catch-up stops new writes', () async {
+      client.offline = true;
+      final sync = await appSync(client);
+
+      for (final name in ['a.jpg', 'b.jpg', 'c.jpg']) {
+        await capture(sync, name: name);
+      }
+      await settle();
+
+      expect(client.writeAttempts, 3);
+
+      client
+        ..offline = false
+        ..holdWrites = Completer<void>();
+
+      final controller = await lockAndUnlock(sync);
+
+      await eventually(() => client.writeAttempts == 4);
+
+      // Panic, with one write on its way.
+      controller.lock();
+
+      client.holdWrites!.complete();
+
+      await eventually(() => announced.isNotEmpty);
+      await settle();
+
+      // The write already sent was allowed to land; nothing new started.
+      expect(client.writeAttempts, 4);
+      expect(client.metadataWrites, hasLength(1));
+    });
+
+    test('the catch-up sends nothing while the app is locked', () async {
+      client.offline = true;
+      final sync = await appSync(client);
+
+      await capture(sync);
+      await settle();
+
+      client.offline = false;
+      keyManager.lock();
+
+      var loaded = false;
+
+      await sync.catchUp(() async {
+        loaded = true;
+        return storage.getEvidence();
+      }, keepGoing: () => keyManager.isUnlocked);
+
+      // Only the attempt made at capture, while unlocked.
+      expect(client.writeAttempts, 1);
+      expect(loaded, isFalse);
+    });
+
+    test(
+      'without Firebase a capture still saves, and nothing is tried',
+      () async {
+        final sync = offlineSync();
+
+        final item = await capture(sync);
+        await settle();
+
+        expect((await storage.getEvidence()).map((e) => e.id), [item.id]);
+
+        // The index is not even decrypted when there is nowhere to send.
+        var loaded = false;
+
+        await sync.catchUp(() async {
+          loaded = true;
+          return const <EvidenceItem>[];
+        });
+
+        expect(loaded, isFalse);
+      },
+    );
   });
 }

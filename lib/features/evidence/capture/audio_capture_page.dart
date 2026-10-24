@@ -6,10 +6,10 @@ import 'package:record/record.dart';
 
 import '../../../app/app_lock_controller.dart';
 import '../../../app/app_scope.dart';
-import '../../../models/audit/audit_entry.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../services/storage/secure_delete.dart';
 import 'capture_temp.dart';
+import 'save_capture.dart';
 
 class AudioCapturePage extends StatefulWidget {
   const AudioCapturePage({super.key});
@@ -118,6 +118,7 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
 
     final storage = AppScope.of(context).storage;
     final audit = AppScope.of(context).audit;
+    final sync = AppScope.of(context).sync;
 
     setState(() {
       _saving = true;
@@ -138,22 +139,19 @@ class _AudioCapturePageState extends State<AudioCapturePage> {
         throw Exception('Recorded audio file does not exist.');
       }
 
-      final evidence = await storage.addEvidence(
-        sourceFile: file,
+      // Waits for the encrypted copy only. Recording it on the server is
+      // started, not waited for: no signal must not hold up the save.
+      final evidence = await saveCapture(
+        storage: storage,
+        audit: audit,
+        sync: sync,
+        source: file,
         type: EvidenceType.audio,
         originalFileName: 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a',
       );
 
       // addEvidence destroyed the plaintext.
       _file = null;
-
-      unawaited(
-        audit.record(
-          AuditEventType.captured,
-          evidenceId: evidence.id,
-          detail: {'type': evidence.type.name},
-        ),
-      );
 
       if (!mounted) return;
 

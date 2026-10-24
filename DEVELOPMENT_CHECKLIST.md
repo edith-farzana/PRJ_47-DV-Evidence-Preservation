@@ -1,7 +1,7 @@
 # Secure Evidence — Development Checklist
 
 **Branch for this work:** `feature/court-export`. `master` is frozen at the ~80% review (tag `review-80-percent`)
-**Last updated:** 2026-09-24
+**Last updated:** 2026-10-24
 
 This is the single source of truth for what is built, what is not, and what order it gets built in. Tick boxes as you go and keep the progress table at the bottom honest — it is what we quote in the review.
 
@@ -443,6 +443,20 @@ Where "secure read-only database" stops being a claim and becomes something we c
 
 ## P8 — Offline sync queue · 9% *(after review)*
 
+> **Started 2026-10-24 — the server record no longer waits for the vault.**
+> Until now an item's metadata reached Firestore only when the vault screen
+> was opened, so a survivor who captured and never reopened the vault while
+> online left no immutable record at all — the project's main claim quietly
+> did not hold for her. The record is now sent at three moments, all through
+> `EvidenceSync.syncPendingMetadata`: straight after capture (background, never
+> blocking the save), at every unlock, and when the vault opens. Nothing is sent
+> before unlock, panic and auto-lock never wait on it, and a lock stops new
+> writes. The file (blob) queue and backoff below are still to do.
+
+- [x] Metadata record sent straight after capture without blocking or failing it (`saveCapture` → `EvidenceSync.recordCaptured`)
+- [x] Pending metadata caught up at every unlock, vault opened or not (`AppLockController` `afterUnlock` → `EvidenceSync.catchUp`); stops starting writes once locked
+- [x] No duplicate metadata writes when capture, unlock and vault overlap; every arrival logged once (`recordedOnServer`)
+- [x] Tests: recorded at capture when online; offline capture recorded at the next unlock; a failing or silent server never fails or delays a capture; panic stops new writes; nothing sent while locked
 - [ ] Queue uploads when offline, retry with exponential backoff
 - [ ] Per-item sync status in the vault (local / syncing / synced)
 - [ ] Never delete the local copy after upload — the device copy is the fallback
@@ -475,7 +489,7 @@ Update this after every gate.
 | P5 Firebase + rules | 13% | ✅ Built and verified, minus Storage | 138 Dart tests green, 15 rules tests green, Firestore rules deployed. Blob upload and receipts deferred: Storage needs billing |
 | P6 Audit log | 10% | ✅ Built, device check pending | Hash-chained, sealed, encrypted; wrong-PIN notice; activity-log screen. 27 new tests, 182 total. Server anchoring outstanding |
 | P7 Verification & export | 13% | ✅ Built except the recovery key | Viewing, verification with server cross-check, and the court-export bundle. 207 tests total. Recovery key outstanding |
-| P8 Offline sync | 9% | Not started | — |
+| P8 Offline sync | 9% | Started | Metadata record now sent at capture and at every unlock, not only on opening the vault. 13 new tests, 220 total. Blob queue and backoff not started |
 | P9 Hardening & CI | 8% | Not started | — |
 
 **Baseline before this branch: ~27%** (UI, decoy calculator, capture, plaintext local storage)

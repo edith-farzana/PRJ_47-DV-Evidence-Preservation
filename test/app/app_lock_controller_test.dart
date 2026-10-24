@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -71,6 +72,69 @@ void main() {
       expect(controller.state, AppLockState.showPin);
       expect(keyManager.isUnlocked, isFalse);
       expect(() => keyManager.masterKey, throwsStateError);
+    });
+  });
+
+  // In the app this sends the server any evidence record still missing.
+  // It reaches the network, so nothing about locking or unlocking may
+  // wait on it.
+  group('after unlock', () {
+    test('is started, and unlocking does not wait for it', () async {
+      var started = 0;
+      controller = AppLockController(
+        keyManager: keyManager,
+        store: store,
+        afterUnlock: () {
+          started++;
+          return Completer<void>().future;
+        },
+      );
+
+      await unlock();
+
+      expect(started, 1);
+      expect(controller.state, AppLockState.unlocked);
+    });
+
+    test('is not started before the PIN', () {
+      var started = 0;
+      controller = AppLockController(
+        keyManager: keyManager,
+        store: store,
+        afterUnlock: () async => started++,
+      );
+
+      controller.showPin();
+
+      expect(started, 0);
+    });
+
+    test('a failure in it does not break unlocking', () async {
+      controller = AppLockController(
+        keyManager: keyManager,
+        store: store,
+        afterUnlock: () => throw StateError('no signal'),
+      );
+
+      await unlock();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.state, AppLockState.unlocked);
+      expect(keyManager.isUnlocked, isTrue);
+    });
+
+    test('panic while it is still running locks at once', () async {
+      controller = AppLockController(
+        keyManager: keyManager,
+        store: store,
+        afterUnlock: () => Completer<void>().future,
+      );
+      await unlock();
+
+      controller.lock();
+
+      expect(keyManager.isUnlocked, isFalse);
+      expect(controller.state, AppLockState.locked);
     });
   });
 

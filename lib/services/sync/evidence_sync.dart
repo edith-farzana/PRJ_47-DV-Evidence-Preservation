@@ -26,6 +26,7 @@ class EvidenceSync extends ChangeNotifier {
     required this._client,
     required this._states,
     this._fileBackupEnabled = cloudFileBackupEnabled,
+    this._onRecorded,
   });
 
   final EvidenceSyncClient _client;
@@ -34,6 +35,19 @@ class EvidenceSync extends ChangeNotifier {
   /// Overridable so tests can drive both states; in the app it is
   /// [cloudFileBackupEnabled].
   final bool _fileBackupEnabled;
+
+  /// Told each id whose record has just reached the server. The app
+  /// writes it to the activity log (see `main.dart`), so the entry is
+  /// there whichever moment sent the record: capture, unlock or vault.
+  final Future<void> Function(String evidenceId)? _onRecorded;
+
+  /// Ids whose record is being written right now.
+  ///
+  /// A capture, an unlock and the vault can all reach for the same item
+  /// at once. Offline, Firestore holds a write open until the signal
+  /// returns, so without this a second call would queue a duplicate
+  /// write behind the first.
+  final Set<String> _inFlight = {};
 
   bool get isConfigured => _client.isConfigured;
 
@@ -59,36 +73,125 @@ class EvidenceSync extends ChangeNotifier {
 
   /// Records every item that has not reached Firestore yet.
   ///
-  /// Called when the vault is opened rather than at capture time: a
-  /// capture may happen with no signal, and this way the record catches
-  /// up by itself. A failure here is not shown to the user -- being
-  /// offline is ordinary, and the evidence is already safe on the phone.
+  /// The one place a record is sent from. Three moments call it, so a
+  /// capture made with no signal still gets its record without anyone
+  /// having to remember to open the vault:
+  ///
+  ///  * straight after a capture, through [recordCaptured];
+  ///  * at every unlock, through [catchUp];
+  ///  * whenever the vault is opened.
+  ///
+  /// A failure here is not shown to the user -- being offline is
+  /// ordinary, and the evidence is already safe on the phone. The item
+  /// stays pending for the next of those moments.
+  ///
+  /// [keepGoing] is asked before each write; once it says no, nothing
+  /// more is started. A write already on its way is left to finish.
   ///
   /// Returns the ids whose record reached the server on this call.
-  Future<List<String>> syncPendingMetadata(List<EvidenceItem> items) async {
+  Future<List<String>> syncPendingMetadata(
+    List<EvidenceItem> items, {
+    bool Function()? keepGoing,
+  }) async {
     if (!_client.isConfigured) return const [];
 
     final recorded = <String>[];
 
     for (final item in items) {
-      final record = _states.recordFor(item.id);
+      if (keepGoing != null && !keepGoing()) break;
 
-      if (record.metadataSynced) continue;
+      if (_states.recordFor(item.id).metadataSynced) continue;
+
+      // Already being sent by another call.
+      if (!_inFlight.add(item.id)) continue;
 
       try {
         await _client.writeMetadata(item.id, metadataPayload(item));
 
-        await _states.save(item.id, record.copyWith(metadataSynced: true));
+        // Read again rather than reuse the record from before the write,
+        // which may have taken hours: a backup may have changed it since.
+        await _states.save(
+          item.id,
+          _states.recordFor(item.id).copyWith(metadataSynced: true),
+        );
 
         recorded.add(item.id);
       } catch (error) {
         debugPrint('Metadata for ${item.id} not recorded yet: $error');
+      } finally {
+        _inFlight.remove(item.id);
       }
     }
 
-    if (recorded.isNotEmpty) notifyListeners();
+    if (recorded.isNotEmpty) {
+      notifyListeners();
+
+      await _announce(recorded);
+    }
 
     return recorded;
+  }
+
+  /// Sends [item]'s record straight after it has been captured.
+  ///
+  /// The capture screens start this and do not wait for it (see
+  /// `saveCapture`): by now the evidence is safe on the phone, and with
+  /// no signal the write may not finish for hours. If it fails, or never
+  /// gets the chance, the next unlock or vault visit sends it.
+  ///
+  /// Never throws.
+  Future<void> recordCaptured(EvidenceItem item) async {
+    try {
+      await syncPendingMetadata([item]);
+    } catch (error) {
+      debugPrint('Metadata for ${item.id} not recorded at capture: $error');
+    }
+  }
+
+  /// Sends every record still missing from the server.
+  ///
+  /// Called at each unlock (see `main.dart`), so a capture made offline
+  /// is recorded the next time the app is opened, whether or not the
+  /// vault is. Never before an unlock: an app that contacts Google while
+  /// it is still a calculator would give itself away.
+  ///
+  /// [loadItems] decrypts the evidence index, so it is only called when
+  /// there is a server to send to. [keepGoing] is as for
+  /// [syncPendingMetadata]; the app passes whether the vault is still
+  /// unlocked, so a panic stops new writes.
+  ///
+  /// Never throws, and nothing should wait for it: neither an unlock nor
+  /// a panic may be held up by the network.
+  Future<void> catchUp(
+    Future<List<EvidenceItem>> Function() loadItems, {
+    bool Function()? keepGoing,
+  }) async {
+    try {
+      if (!_client.isConfigured) return;
+      if (keepGoing != null && !keepGoing()) return;
+
+      await syncPendingMetadata(await loadItems(), keepGoing: keepGoing);
+    } catch (error) {
+      // An index that cannot be read is reported by the vault screen.
+      // Here it only means there is nothing to send this time.
+      debugPrint('Metadata catch-up did not run: $error');
+    }
+  }
+
+  /// Passes newly recorded ids to [_onRecorded], one at a time and in
+  /// order. A failure there is not a failure to record.
+  Future<void> _announce(List<String> ids) async {
+    final onRecorded = _onRecorded;
+
+    if (onRecorded == null) return;
+
+    for (final id in ids) {
+      try {
+        await onRecorded(id);
+      } catch (error) {
+        debugPrint('Could not note that $id was recorded: $error');
+      }
+    }
   }
 
   /// Uploads the encrypted blob for [item], then writes its receipt.

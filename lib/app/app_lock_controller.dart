@@ -39,6 +39,7 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
     required this._keyManager,
     required this._store,
     this._audit,
+    this._afterUnlock,
   });
 
   final KeyManager _keyManager;
@@ -46,6 +47,11 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Optional so the lock logic can be tested on its own.
   final AuditLog? _audit;
+
+  /// Started each time the PIN is accepted, and never waited for. The
+  /// app uses it to send the server any evidence record still missing
+  /// (see `main.dart`). Optional for the same reason as [_audit].
+  final Future<void> Function()? _afterUnlock;
 
   static const String _autoLockKey = 'app.v1.autoLock';
 
@@ -92,6 +98,18 @@ class AppLockController extends ChangeNotifier with WidgetsBindingObserver {
 
     if (result != null) {
       unawaited(_audit?.onUnlocked(result));
+    }
+
+    final afterUnlock = _afterUnlock;
+
+    if (afterUnlock != null) {
+      // Not awaited, and its failures stay its own: opening the vault
+      // must never wait on, or be broken by, the network.
+      unawaited(
+        Future.sync(afterUnlock).catchError((Object error) {
+          debugPrint('After-unlock work failed: $error');
+        }),
+      );
     }
   }
 
