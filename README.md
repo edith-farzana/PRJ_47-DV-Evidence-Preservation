@@ -202,8 +202,6 @@ That's why privacy, discretion and preservation are treated as part of the same 
 
 ---
 
-<p align="center">
-
 ### **SECURE EVIDENCE**
 
 *Because some evidence is too important to lose.*
