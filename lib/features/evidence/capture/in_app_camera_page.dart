@@ -6,11 +6,11 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_lock_controller.dart';
 import '../../../app/app_scope.dart';
-import '../../../models/audit/audit_entry.dart';
 import '../../../models/evidence/evidence_item.dart';
 import '../../../services/storage/evidence_storage.dart';
 import '../../../services/storage/secure_delete.dart';
 import 'capture_temp.dart';
+import 'save_capture.dart';
 
 /// Photo and video capture inside the app.
 ///
@@ -241,9 +241,15 @@ class _InAppCameraPageState extends State<InAppCameraPage>
     String extension,
   ) async {
     final audit = AppScope.of(context).audit;
+    final sync = AppScope.of(context).sync;
 
-    final evidence = await storage.addEvidence(
-      sourceFile: _unsaved!,
+    // Waits for the encrypted copy only. Recording it on the server is
+    // started, not waited for: no signal must not hold up the save.
+    final evidence = await saveCapture(
+      storage: storage,
+      audit: audit,
+      sync: sync,
+      source: _unsaved!,
       type: type,
       originalFileName:
           '${type.name}_${DateTime.now().millisecondsSinceEpoch}.$extension',
@@ -251,14 +257,6 @@ class _InAppCameraPageState extends State<InAppCameraPage>
 
     // addEvidence destroyed the plaintext.
     _unsaved = null;
-
-    unawaited(
-      audit.record(
-        AuditEventType.captured,
-        evidenceId: evidence.id,
-        detail: {'type': evidence.type.name},
-      ),
-    );
 
     if (!mounted) return;
 

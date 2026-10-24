@@ -2,7 +2,7 @@
 
 **A complete walk-through, in plain language**
 
-**Last updated:** 2026-09-24
+**Last updated:** 2026-10-24
 
 ---
 
@@ -158,7 +158,8 @@ From then on, the app opens as a calculator.
 3. Enter the PIN. The app spends about a second deliberately grinding through a
    slow calculation — this is intentional, and it is what makes guessing PINs
    impractical.
-4. The evidence side opens.
+4. The evidence side opens. In the background, any server record a capture
+   could not send earlier — no signal at the time — is sent now.
 
 ### If the PIN is wrong
 
@@ -236,6 +237,25 @@ update the stored fingerprint to match it, and verification would happily pass.
 Binding the two together means you cannot alter one without destroying the
 other.
 
+#### When the server copy is made
+
+The server record is sent **straight after the capture**, in the background.
+Saving the evidence never waits for it: "Photo saved" appears as soon as the
+encrypted copy is safe on the phone, whether or not the server has answered.
+
+With no signal at that moment — which is ordinary — nothing is shown and
+nothing is lost. The record is sent the **next time the app is unlocked**,
+whether or not the vault is opened, and again whenever the vault is opened,
+until the server has it. Each time one arrives, the activity log says so.
+
+Two limits are deliberate:
+
+- **Nothing is sent before the app is unlocked.** An app that contacts Google
+  while it is still a calculator would give itself away.
+- **Panic and auto-lock never wait for it.** They are as instant as ever. Once
+  the app locks, nothing new is sent; a record that was already on its way is
+  allowed to finish.
+
 ### Looking at evidence
 
 Tap any item in the vault. The app decrypts it into a temporary file and shows
@@ -307,7 +327,8 @@ verify is reported as unverified.
 ### What verification still cannot catch
 
 The server record is only as good as the moment it was made. The app sends it
-the next time the vault is opened with an internet connection.
+straight after the capture or, if there is no signal then, the next time the
+app is unlocked with an internet connection.
 
 So if a phone is kept **offline from the moment of capture**, there is no server
 record to compare against, and verification can only say **VERIFIED ON THIS
@@ -435,7 +456,7 @@ app would prove very little.
 
 | Sent | When | Why it is safe |
 |---|---|---|
-| Fingerprints, date, file size, the locked file key | For every capture | All of it is either a one-way code or something locked with a key that never leaves the phone. Useless to anyone who intercepts or stores it |
+| Fingerprints, date, file size, the locked file key | For every capture: straight away, or at the next unlock if there was no signal | All of it is either a one-way code or something locked with a key that never leaves the phone. Useless to anyone who intercepts or stores it |
 | The encrypted evidence file itself | **Never, currently** | See below |
 | Name, location, contacts, messages, anything identifying | **Never** | Not collected at all |
 | An export bundle | **Only when she creates one** and chooses where to send it | Password-protected by default; neutral names; no keys, no original filenames, and none of her unlock or panic history |

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app/app.dart';
 import 'app/app_lock_controller.dart';
 import 'features/evidence/capture/capture_temp.dart';
+import 'models/audit/audit_entry.dart';
 import 'services/audit/audit_log.dart';
 import 'services/crypto/key_manager.dart';
 import 'services/crypto/secure_store.dart';
@@ -60,18 +61,31 @@ Future<void> main() async {
     keyManager: keyManager,
   );
 
+  final sync = EvidenceSync(
+    client: FirebaseEvidenceClient(),
+    states: BackupStateStore(store),
+    // Whichever moment got a record to the server -- capture, unlock or
+    // the vault -- the activity log says when. The export manifest reads
+    // each item's history from there.
+    onRecorded: (id) =>
+        audit.record(AuditEventType.recordedOnServer, evidenceId: id),
+  );
+  await sync.load();
+
   final lockController = AppLockController(
     keyManager: keyManager,
     store: store,
     audit: audit,
+    // Each unlock sends any record a capture could not send -- no signal
+    // at the time -- so it catches up even if the vault is never opened.
+    // After unlock only, never at launch; and it stops starting new
+    // writes the moment the app locks again.
+    afterUnlock: () => sync.catchUp(
+      storage.getEvidence,
+      keepGoing: () => keyManager.isUnlocked,
+    ),
   );
   await lockController.load();
-
-  final sync = EvidenceSync(
-    client: FirebaseEvidenceClient(),
-    states: BackupStateStore(store),
-  );
-  await sync.load();
 
   // Plaintext left behind if the app was killed mid-capture, or while
   // a decrypted item was on screen.
